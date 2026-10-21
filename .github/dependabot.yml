@@ -1,0 +1,24 @@
+# Weekly, and grouped per ecosystem, so updates arrive as a few pull requests
+# rather than one per dependency. Security updates are not grouped and still
+# arrive as soon as an advisory is published.
+#
+# There is no gomod entry: chat uses only the standard library.
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # The image's build stage.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      images:
+        patterns: ["*"]

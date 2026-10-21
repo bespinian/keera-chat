@@ -1,0 +1,32 @@
+# What a tag produces: the image, its SBOM, and a provenance attestation for
+# the image.
+#
+# The attestation is why this builds here and not on a workstation:
+# actions/attest-build-provenance signs, with GitHub's key, the workflow,
+# repository and commit that produced the image. A laptop build could claim
+# the same and nobody could check it.
+#
+# The build is in release-build.yml, a reusable workflow, so the signature
+# names that file. It explains how the build cannot forge its own provenance
+# (SLSA Build L3).
+#
+# It runs the same `make` targets a developer does, with CHAT_IMAGE pointed at
+# the registry, so there is one definition of the image build.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+# The most any job in release-build.yml may have. Each job there asks for only
+# what it needs.
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+  attestations: write
+  artifact-metadata: write
+
+jobs:
+  release:
+    uses: ./.github/workflows/release-build.yml

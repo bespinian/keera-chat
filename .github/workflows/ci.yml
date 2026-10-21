@@ -1,0 +1,63 @@
+# Every commit must be formatted, pass the linters, build, and pass the tests.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+# A new push to a branch cancels the run for the previous one. Not on main, so
+# every commit there keeps its result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  # Chat builds without cgo, so the tests do too. The race detector needs it,
+  # so the test step turns it back on.
+  CGO_ENABLED: "0"
+
+jobs:
+  check:
+    name: Format, lint and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      # Before the linters: formatting is a one-command fix, and a lint report on
+      # a file about to be reformatted is not worth reading.
+      - name: Check formatting
+        run: make fmt-check
+
+      - name: Vet
+        run: make vet
+
+      # Pinned, so a linter release cannot turn an untouched commit red.
+      - name: Lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.14
+
+      - name: Build
+        run: make build
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Test
+        run: make test
+        env:
+          CGO_ENABLED: "1"

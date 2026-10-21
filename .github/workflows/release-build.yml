@@ -1,0 +1,111 @@
+# How a release is built and attested. release.yml calls this on a `v*` tag;
+# it has no trigger of its own.
+#
+# Laid out for SLSA Build L3: the build cannot forge its own provenance.
+#
+# - The build job runs our code (make, go, podman) and gets no id-token
+#   permission, so nothing it runs can get a signing token. Only the
+#   provenance job gets one, and it checks out nothing and runs only GitHub's
+#   actions, signing the image digest it is handed.
+# - This is a reusable workflow, so the signature names this file, not the
+#   caller. `gh attestation verify --signer-workflow` checks for it.
+name: Release build
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  image:
+    name: Image and SBOM
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # ghcr.io
+    outputs:
+      name: ${{ steps.image.outputs.name }}
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # The image is named after the binary, so only the owner comes from the
+      # environment. ghcr.io needs a lowercase path, and owner names may not be.
+      - name: Name the image
+        id: image
+        run: |
+          owner=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
+          echo "name=ghcr.io/$owner/keera-chat" >> "$GITHUB_OUTPUT"
+          echo "ref=ghcr.io/$owner/keera-chat:${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      # `sbom` depends on `image`, so it describes the image this job pushes.
+      # VERSION is what the binary reports, since the build context has no .git
+      # for the toolchain to stamp from.
+      - name: Build the image and its SBOM
+        run: make sbom CHAT_IMAGE='${{ steps.image.outputs.ref }}' VERSION="$GITHUB_REF_NAME"
+
+      # The attestation's subject must be the digest: a tag can be moved later.
+      - name: Push
+        id: push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$GITHUB_TOKEN" | podman login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          podman push '${{ steps.image.outputs.ref }}' --digestfile=digest.txt
+          echo "digest=$(cat digest.txt)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sbom
+          path: build/sbom/keera-chat.cdx.json
+          if-no-files-found: error
+
+  image-provenance:
+    name: Image provenance
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write # to push the attestation next to the image
+      id-token: write # the OIDC token the attestation is signed against
+      attestations: write # the attestation itself
+      artifact-metadata: write # the storage record for the pushed image
+    steps:
+      # The attestation step reads docker's credentials to reach the registry.
+      - name: Log in to ghcr.io
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Attest the build
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ needs.image.outputs.name }}
+          subject-digest: ${{ needs.image.outputs.digest }}
+          # Also stored next to the image, so `gh attestation verify` and cosign
+          # find it from the image alone, which is all a customer has.
+          push-to-registry: true
+
+  # Last, so a release never shows an image that has no provenance yet.
+  publish:
+    name: Publish the release
+    needs: image-provenance
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # the release and its files
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: sbom
+          path: build/sbom
+
+      # A tag pushed from a workstation has no release yet; one cut from the web
+      # interface does.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes \
+            build/sbom/keera-chat.cdx.json \
+          || gh release upload "$GITHUB_REF_NAME" --clobber \
+            build/sbom/keera-chat.cdx.json
