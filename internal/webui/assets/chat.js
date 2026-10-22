@@ -231,6 +231,13 @@ export function chatView(app, id) {
     if (pinned) scroll.scrollTop = scroll.scrollHeight;
     toBottom.hidden = pinned || !conv || !conv.messages.length;
   }
+  // The thread also changes size without a redraw: a phone's keyboard opens
+  // or closes and takes the space with it, and images load after their
+  // message is drawn. Without this, the end slides out of view and the
+  // person has to scroll down to it.
+  const resized = new ResizeObserver(stick);
+  resized.observe(scroll);
+  resized.observe(thread);
 
   /* -------------------------------------------------------- rendering */
 
@@ -276,9 +283,9 @@ export function chatView(app, id) {
       if (!l || !conv) return render();
       const i = conv.messages.indexOf(l.reply);
       const node = thread.children[i];
+      // The thread's ResizeObserver keeps the end in view as it grows.
       if (node) node.replaceWith(messageEl(l.reply, i));
       else render();
-      stick();
     });
   };
 
@@ -890,13 +897,13 @@ export function chatView(app, id) {
       return;
     }
     app.choose(conv.model, conv.key_id);
-    render();
     pinned = true;
-    stick();
+    render();
   }
 
   function destroy() {
     view.gone = true;
+    resized.disconnect();
     // The reply it was showing keeps streaming without it.
   }
 
