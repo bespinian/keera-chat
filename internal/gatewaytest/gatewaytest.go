@@ -121,7 +121,8 @@ func (g *Gateway) Handler() http.Handler {
 	}))
 	mux.HandleFunc("GET /control/v1/routers", g.authed(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"data": []map[string]any{
-			{"alias": "keera-auto", "description": "Picks Speed or Think for each message"},
+			{"alias": "keera-auto", "display_name": "Keera Auto",
+				"description": "Picks Speed or Think for each message"},
 		}})
 	}))
 	mux.HandleFunc("POST /control/v1/playground/chat", g.authed(g.chat))

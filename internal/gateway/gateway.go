@@ -229,6 +229,7 @@ type Model struct {
 
 type Router struct {
 	Alias       string `json:"alias"`
+	DisplayName string `json:"display_name"`
 	Description string `json:"description"`
 }
 

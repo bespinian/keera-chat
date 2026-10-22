@@ -123,7 +123,8 @@ func (s *Server) chatTargets(r *http.Request, c *caller) ([]modelOut, error) {
 		s.log.Warn("reading the routers failed", "error", err)
 	}
 	for _, rt := range routers {
-		out = append(out, modelOut{Alias: rt.Alias, Description: rt.Description, Router: true})
+		out = append(out, modelOut{Alias: rt.Alias, Name: rt.DisplayName,
+			Description: rt.Description, Router: true})
 	}
 	return out, nil
 }

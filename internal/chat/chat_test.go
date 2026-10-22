@@ -191,7 +191,10 @@ func TestMe(t *testing.T) {
 				Scope string
 			}
 		}
-		Models      []struct{ Alias string }
+		Models []struct {
+			Alias string
+			Name  string
+		}
 		PendingKeys int `json:"pending_keys"`
 	}
 	if got := h.do("GET", "/api/me", nil, &me); got != 200 {
@@ -212,7 +215,13 @@ func TestMe(t *testing.T) {
 		t.Errorf("budget = %+v, want the project's, which has the least left", me.Keys[0].Budget)
 	}
 	if len(me.Models) != 3 || me.PendingKeys != 1 {
-		t.Errorf("models = %+v, pending = %d", me.Models, me.PendingKeys)
+		t.Fatalf("models = %+v, pending = %d", me.Models, me.PendingKeys)
+	}
+	// A router has a name for people like a model.
+	for _, m := range me.Models {
+		if m.Name == "" {
+			t.Errorf("%s has no name", m.Alias)
+		}
 	}
 }
 
