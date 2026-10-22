@@ -1248,6 +1248,35 @@ h6.md-h {
   height: 17px;
   stroke-width: 2.2;
 }
+.composer-meter {
+  display: grid;
+  flex: none;
+  margin-right: 4px;
+  cursor: help;
+}
+.composer-meter svg {
+  width: 18px;
+  height: 18px;
+  /* Filled from the top, clockwise. */
+  transform: rotate(-90deg);
+}
+.composer-meter circle {
+  fill: none;
+  stroke-width: 2.5;
+}
+.composer-meter-track {
+  stroke: var(--border);
+}
+.composer-meter-fill {
+  stroke: var(--faint);
+  stroke-dasharray: 100;
+  transition:
+    stroke-dashoffset 0.3s,
+    stroke 0.3s;
+}
+.composer-meter.is-high .composer-meter-fill {
+  stroke: var(--warn);
+}
 .composer-stop {
   background: var(--text);
   color: var(--surface);

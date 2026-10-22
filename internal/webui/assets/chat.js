@@ -18,6 +18,7 @@ import {
   copyText,
   sentence,
   oneLine,
+  svg,
 } from "./ui.js";
 
 // The formats every API that reads images accepts. The server checks the same
@@ -133,6 +134,27 @@ export function chatView(app, id) {
     },
     icon(icons.stop),
   );
+  // meter fills as the conversation uses up the model's context. Each
+  // circle's length is 100, so the gap left is what is still free.
+  const ring = (cls) =>
+    svg("circle", {
+      class: cls,
+      cx: "10",
+      cy: "10",
+      r: "7.5",
+      pathLength: "100",
+    });
+  const meterFill = ring("composer-meter-fill");
+  const meter = h(
+    "span",
+    { class: "composer-meter", role: "img", hidden: true },
+    svg(
+      "svg",
+      { viewBox: "0 0 20 20", "aria-hidden": "true" },
+      ring("composer-meter-track"),
+      meterFill,
+    ),
+  );
   const composer = h(
     "form",
     {
@@ -153,6 +175,7 @@ export function chatView(app, id) {
       { class: "composer-row" },
       attachBtn,
       h("div", { class: "spacer" }),
+      meter,
       sendBtn,
       stopBtn,
     ),
@@ -224,6 +247,7 @@ export function chatView(app, id) {
     paintHero();
     paintNote();
     paintSend();
+    paintMeter();
     document.title =
       conv && conv.title ? `${conv.title} · Keera Chat` : "Keera Chat";
     if (!conv) {
@@ -300,6 +324,41 @@ export function chatView(app, id) {
     sendBtn.disabled = !app.choice || (!input.value.trim() && !attached.length);
     attachBtn.disabled = !app.choice;
     input.disabled = !app.choice;
+  }
+
+  /** paintMeter shows how much of the chosen model's context the
+   *  conversation used, as the model server counted it for the last reply.
+   *  A router has no context of its own, and a conversation from before
+   *  replies were counted has no count, so neither shows one.
+   *
+   *  The count is shown only when the chosen model made it, since models
+   *  count tokens differently. A last reply that failed may have been refused
+   *  as too long, which an earlier count would contradict, so it hides the
+   *  meter too. A stopped reply keeps the count from before it. */
+  function paintMeter() {
+    const model = app.choice?.model;
+    const max = model?.context;
+    const last = conv?.messages.findLast((m) => m.role === "assistant");
+    const counted = conv?.messages.findLast((m) => m.tokens);
+    meter.hidden =
+      !max || !counted || !!last.error || counted.model !== model.alias;
+    if (meter.hidden) return;
+    const used = counted.tokens;
+    const share = Math.min(used / max, 1);
+    const name = model.name || model.alias;
+    let label;
+    if (share >= 0.95) {
+      label = `${name}'s context is full. Start a new chat, or choose a model that can read more.`;
+    } else {
+      const pct = Math.round(share * 100);
+      label =
+        `${pct < 1 ? "Less than 1%" : `About ${pct}%`} of ${name}'s context used ` +
+        `(${used.toLocaleString()} of ${max.toLocaleString()} tokens).`;
+    }
+    meter.title = label;
+    meter.setAttribute("aria-label", label);
+    meter.classList.toggle("is-high", share >= 0.8);
+    meterFill.setAttribute("stroke-dashoffset", String(100 - share * 100));
   }
 
   function paintTray() {

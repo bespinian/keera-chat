@@ -52,6 +52,9 @@ func (s *Server) reply(w http.ResponseWriter, r *http.Request, c *caller) {
 		"model":    in.Model,
 		"messages": wire(strings.TrimSpace(in.Instructions), in.Messages),
 		"stream":   true,
+		// The gateway passes the model server's count on only when asked,
+		// and the page shows from it how full the context is.
+		"stream_options": map[string]bool{"include_usage": true},
 	})
 	if err != nil {
 		s.failed(w, r, err)
@@ -138,6 +141,11 @@ type chunk struct {
 		Message string       `json:"message"`
 		Code    gateway.Code `json:"code"`
 	} `json:"error"`
+	// Usage comes last in a stream, in a chunk of its own with no choices.
+	Usage *struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+	} `json:"usage"`
 }
 
 type delta struct {
@@ -162,6 +170,9 @@ func (s *Server) stream(r *http.Request, res *http.Response, out *events, reply 
 		if c.Error != nil && c.Error.Message != "" {
 			e := gateway.NewError(0, c.Error.Code, c.Error.Message).Naming(model)
 			reply.Error, reply.ErrorDetail = e.Message, e.Detail
+		}
+		if c.Usage != nil {
+			reply.Tokens = c.Usage.PromptTokens + c.Usage.CompletionTokens
 		}
 		if len(c.Choices) == 0 {
 			return

@@ -225,6 +225,9 @@ type Model struct {
 	DisplayName  string `json:"display_name"`
 	Description  string `json:"description"`
 	Subscription bool   `json:"subscription"`
+	// MaxContext is how many tokens the model reads at most, or 0 when the
+	// organisation did not say.
+	MaxContext int `json:"max_context_tokens"`
 }
 
 type Router struct {

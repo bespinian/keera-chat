@@ -281,6 +281,7 @@ function message(m) {
     if (m[k]) kept[k] = text(m[k]);
   }
   if (m.stopped === true) kept.stopped = true;
+  if (Number.isSafeInteger(m.tokens) && m.tokens > 0) kept.tokens = m.tokens;
   if (time(m.created_at)) kept.created_at = time(m.created_at);
   return kept;
 }

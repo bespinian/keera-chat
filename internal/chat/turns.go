@@ -33,6 +33,11 @@ type Message struct {
 	// Stopped marks a reply the person stopped. What arrived is kept.
 	Stopped bool   `json:"stopped,omitempty"`
 	Finish  string `json:"finish,omitempty"`
+	// Tokens is how much of the model's context the conversation used once
+	// this reply was written, as the model server counted it. A thinking
+	// model's reasoning is counted too, though it is not sent back, so it is
+	// a little more than the next message starts from.
+	Tokens int `json:"tokens,omitempty"`
 
 	CreatedAt time.Time `json:"created_at"`
 }

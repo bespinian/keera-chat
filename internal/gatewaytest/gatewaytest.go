@@ -223,7 +223,8 @@ func (g *Gateway) access(w http.ResponseWriter, r *http.Request) {
 //   - "broken" fails partway through the reply, as a model server can,
 //   - "slow" streams for a long time, to be stopped,
 //   - anything else gets a reply that shows off the formatting, with the
-//     message quoted back, and keera-think thinks first.
+//     message quoted back, and keera-think thinks first. Its usage comes
+//     last when the request asks for it, as the gateway sends it.
 func (g *Gateway) chat(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("key_id") != KeyID {
 		writeError(w, 404, "not_found", "not found")
@@ -327,9 +328,12 @@ func (g *Gateway) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	send(map[string]any{}, "stop")
-	b, _ := json.Marshal(map[string]any{"choices": []any{},
-		"usage": map[string]int{"prompt_tokens": 42 * len(body["messages"].([]any)), "completion_tokens": 128}})
-	_, _ = fmt.Fprintf(w, "data: %s\n\ndata: [DONE]\n\n", b)
+	if opts, _ := body["stream_options"].(map[string]any); opts["include_usage"] == true {
+		b, _ := json.Marshal(map[string]any{"choices": []any{},
+			"usage": map[string]int{"prompt_tokens": 42 * len(body["messages"].([]any)), "completion_tokens": 128}})
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", b)
+	}
+	_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
 	flush()
 }
 

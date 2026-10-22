@@ -25,7 +25,8 @@ function append(el, children) {
   }
 }
 
-function svg(tag, props, ...children) {
+/** svg is h() for SVG elements, which need their namespace. */
+export function svg(tag, props, ...children) {
   const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
   for (const [k, v] of Object.entries(props || {})) {
     if (v === null || v === undefined || v === false) continue;

@@ -34,6 +34,10 @@ type modelOut struct {
 	Description string `json:"description,omitempty"`
 	// Router is set for a router, which picks a model per message.
 	Router bool `json:"router,omitempty"`
+	// Context is how many tokens the model reads at most, so the page can
+	// show how much of it a conversation uses. A router has none, since
+	// each message may go to a different model.
+	Context int `json:"context,omitempty"`
 }
 
 // keyOut is one of the person's keys that chat can send with. Its secret is
@@ -111,7 +115,7 @@ func (s *Server) chatTargets(r *http.Request, c *caller) ([]modelOut, error) {
 	for _, m := range models {
 		if m.Enabled && m.Kind == "chat" && !m.Subscription {
 			out = append(out, modelOut{Alias: m.Alias, Name: m.DisplayName,
-				Description: m.Description})
+				Description: m.Description, Context: m.MaxContext})
 		}
 	}
 	// Failing to read the routers still leaves the models.

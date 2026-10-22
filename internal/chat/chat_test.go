@@ -192,8 +192,9 @@ func TestMe(t *testing.T) {
 			}
 		}
 		Models []struct {
-			Alias string
-			Name  string
+			Alias   string
+			Name    string
+			Context int
 		}
 		PendingKeys int `json:"pending_keys"`
 	}
@@ -217,8 +218,13 @@ func TestMe(t *testing.T) {
 	if len(me.Models) != 3 || me.PendingKeys != 1 {
 		t.Fatalf("models = %+v, pending = %d", me.Models, me.PendingKeys)
 	}
-	// A router has a name for people like a model.
+	// A router picks a model per message, so it has no context of its own,
+	// but it has a name for people like a model.
+	wantContext := map[string]int{"keera-speed": 131072, "keera-think": 262144}
 	for _, m := range me.Models {
+		if want := wantContext[m.Alias]; m.Context != want {
+			t.Errorf("%s context = %d, want %d", m.Alias, m.Context, want)
+		}
 		if m.Name == "" {
 			t.Errorf("%s has no name", m.Alias)
 		}
@@ -270,6 +276,13 @@ func TestReply(t *testing.T) {
 	}
 	if got := roles(h.gw.LastChat()); got != "user" {
 		t.Errorf("first request roles = %s", got)
+	}
+	// The model server's count comes back only when asked for.
+	if opts, _ := h.gw.LastChat()["stream_options"].(map[string]any); opts["include_usage"] != true {
+		t.Errorf("stream_options = %v, want the usage asked for", h.gw.LastChat()["stream_options"])
+	}
+	if reply.Tokens != 42+128 {
+		t.Errorf("tokens = %d, want the prompt and the reply", reply.Tokens)
 	}
 
 	// Custom instructions go first, and the conversation so far follows.
