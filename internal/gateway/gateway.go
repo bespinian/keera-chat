@@ -61,7 +61,8 @@ type Error struct {
 	// Message is what the person is told.
 	Message string
 	// Detail is the text Message stands in for, when it was not shown: a
-	// model server's own words, which the gateway passes on as they came.
+	// model server's own words, which the gateway passes on as they came, or
+	// the gateway's own words when they were not meant for a person.
 	Detail string
 	// plain is set when Message is chat's own wording, not the gateway's.
 	plain bool
@@ -70,14 +71,15 @@ type Error struct {
 func (e *Error) Error() string { return e.Message }
 
 // NewError words an error for a person. The gateway's own refusals carry a
-// code and are written for people, so they are shown as they are. Anything
-// else, such as an error from a model server, can be technical, so the
-// person gets a plain sentence for its status and the text is kept as the
+// code and are mostly written for people, so they are shown as they are.
+// Anything else, such as an error from a model server, can be technical, and
+// a few of the gateway's codes are about its insides or worded for agents.
+// For those, the person gets a plain sentence and the text is kept as the
 // detail.
 func NewError(status int, code Code, msg string) *Error {
 	e := &Error{Status: status, Code: string(code), Message: msg}
-	if code == "" || msg == "" || technical[e.Code] {
-		e.Message, e.Detail, e.plain = plain(status, ""), msg, true
+	if code == "" || msg == "" || reworded[e.Code] {
+		e.Message, e.Detail, e.plain = plain(status, e.Code, ""), msg, true
 	}
 	return e
 }
@@ -86,17 +88,30 @@ func NewError(status int, code Code, msg string) *Error {
 // which model failed. The gateway's own words are left as they are.
 func (e *Error) Naming(model string) *Error {
 	if e.plain {
-		e.Message = plain(e.Status, model)
+		e.Message = plain(e.Status, e.Code, model)
 	}
 	return e
 }
 
-// technical are the gateway's own codes whose words are about its insides.
-var technical = map[string]bool{"upstream_error": true, "upstream_unavailable": true}
+// reworded are the gateway's own codes whose words are not for a person:
+// those about its insides, and tooLong.
+var reworded = map[string]bool{"upstream_error": true, "upstream_unavailable": true, tooLong: true}
+
+// tooLong is the code the gateway gives a conversation that does not fit in
+// the model's context. Its words are for agents, which compact a conversation
+// when they read them, so a person gets chat's own.
+const tooLong = "context_length_exceeded"
 
 // plain says in simple words what went wrong, for an error with no words of
 // its own a person could follow. model is the model's name, if known.
-func plain(status int, model string) string {
+func plain(status int, code, model string) string {
+	if code == tooLong {
+		if model == "" {
+			model = "the model"
+		}
+		return "This conversation is too long for " + model +
+			". Start a new chat, or choose a model that can read more."
+	}
 	if model == "" {
 		model = "The model"
 	}

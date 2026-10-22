@@ -215,6 +215,8 @@ func (g *Gateway) access(w http.ResponseWriter, r *http.Request) {
 // chat answers from a script, chosen by what the last message says:
 //
 //   - "budget" is refused as a spent budget would be,
+//   - "too long" is refused as too long for the model's context, in the
+//     gateway's words for agents,
 //   - "overloaded" is refused by the model server, in vLLM's words, which
 //     the gateway passes on,
 //   - "broken" fails partway through the reply, as a model server can,
@@ -244,6 +246,13 @@ func (g *Gateway) chat(w http.ResponseWriter, r *http.Request) {
 	case strings.Contains(strings.ToLower(last), "budget"):
 		writeError(w, 429, "budget_exceeded",
 			"the monthly budget of project Research is spent; it starts again on 1 November")
+		return
+	case strings.Contains(strings.ToLower(last), "too long"):
+		writeJSON(w, 400, map[string]any{"error": map[string]any{
+			"message": "prompt is too long: 140000 tokens > 131072 maximum. That is the least this " +
+				"request can be, and '" + model + "' holds no more; compact the conversation or start a new one",
+			"type": "invalid_request_error", "code": "context_length_exceeded",
+		}})
 		return
 	case strings.Contains(strings.ToLower(last), "overloaded"):
 		writeJSON(w, 503, map[string]any{"error": map[string]any{

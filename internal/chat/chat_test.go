@@ -284,21 +284,28 @@ func TestReply(t *testing.T) {
 		t.Fatalf("refused reply = %+v", reply)
 	}
 
-	// A model server's own words are kept as the detail, under plain ones
-	// that name the model, by the page's name for it or else by its alias.
-	for _, c := range []struct{ ask, name, err, detail string }{
-		{"Are you overloaded?", "Keera Speed", "Keera Speed is not working right now", "The engine is currently overloaded"},
-		{"Are you overloaded?", "", "keera-speed is not working right now", "The engine is currently overloaded"},
-		{"Is this broken?", "Keera Speed", "Something went wrong", "CUDA error"},
+	// Words not meant for a person, a model server's or the gateway's for
+	// agents, are kept as the detail, under plain ones that name the model,
+	// by the page's name for it or else by its alias. What arrived before a
+	// failure is kept.
+	for name, c := range map[string]struct{ ask, model, err, detail, content string }{
+		"overloaded":          {"Are you overloaded?", "Keera Speed", "Keera Speed is not working right now", "The engine is currently overloaded", ""},
+		"overloaded, no name": {"Are you overloaded?", "", "keera-speed is not working right now", "The engine is currently overloaded", ""},
+		// The gateway's words for agents would have a person compact the
+		// conversation, which chat cannot do.
+		"too long":          {"Is this too long?", "Keera Speed", "This conversation is too long for Keera Speed.", "prompt is too long", ""},
+		"too long, no name": {"Is this too long?", "", "This conversation is too long for keera-speed.", "prompt is too long", ""},
+		"broken":            {"Is this broken?", "Keera Speed", "Something went wrong", "CUDA error", "Let me think about "},
 	} {
-		_, evs = h.send(map[string]any{"messages": ask(c.ask), "model_name": c.name})
+		_, evs = h.send(map[string]any{"messages": ask(c.ask), "model_name": c.model})
+		var reply Message
 		lastOf(t, evs, "done", &reply)
 		if !strings.HasPrefix(reply.Error, c.err) || !strings.HasPrefix(reply.ErrorDetail, c.detail) {
-			t.Errorf("%s: error = %q, detail = %q", c.ask, reply.Error, reply.ErrorDetail)
+			t.Errorf("%s: error = %q, detail = %q", name, reply.Error, reply.ErrorDetail)
 		}
-	}
-	if reply.Content != "Let me think about " {
-		t.Errorf("content before a failure = %q, want it kept", reply.Content)
+		if reply.Content != c.content {
+			t.Errorf("%s: content = %q, want %q", name, reply.Content, c.content)
+		}
 	}
 
 	// A failed turn is left out of what is sent next, with its question.

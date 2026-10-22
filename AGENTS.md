@@ -99,8 +99,9 @@ standard library, such as `errors.AsType`.
 - **Words for people.** Messages the server sends are lower-case clauses
   without a full stop, joined with semicolons, and say what to do next. The
   page's `sentence()` adds the capital and the full stop. A technical error,
-  such as a model server's, gets a plain sentence and keeps its own text as
-  the detail.
+  such as a model server's, and a refusal the gateway words for agents, such
+  as a conversation too long for the model, get a whole sentence of chat's
+  own (`plain` in `internal/gateway`) and keep their text as the detail.
 - **Comments say why**, in plain, whole sentences. Doc comments start with
   the name they describe. The code says "the person", not "the user", and
   writes British English: organisation, licence.
