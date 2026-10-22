@@ -684,6 +684,7 @@ export function chatView(app, id) {
       content: "",
       reasoning: "",
       streaming: true,
+      showReasoning: false,
     };
     target.messages.push(reply);
     const state = {
