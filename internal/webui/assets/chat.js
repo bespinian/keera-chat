@@ -7,7 +7,18 @@
 import { api, ApiError } from "./api.js";
 import { render as markdown } from "./markdown.js";
 import { exclusive, newID, summary } from "./store.js";
-import { h, icon, icons, iconButton, imageButton, replace, toast, copyText, sentence, oneLine } from "./ui.js";
+import {
+  h,
+  icon,
+  icons,
+  iconButton,
+  imageButton,
+  replace,
+  toast,
+  copyText,
+  sentence,
+  oneLine,
+} from "./ui.js";
 
 // The formats every API that reads images accepts. The server checks the same
 // list, and maxImages, in internal/chat/turns.go, and store.js checks
@@ -19,7 +30,13 @@ const maxImageSide = 2048;
 const maxImages = 10;
 
 export function chatView(app, id) {
-  const view = { id, el: null, destroy, paint: null, focus: () => input.focus() };
+  const view = {
+    id,
+    el: null,
+    destroy,
+    paint: null,
+    focus: () => input.focus(),
+  };
   let conv = id ? null : { id: null, title: "", messages: [] };
   let attached = [];
   let editing = -1;
@@ -48,7 +65,7 @@ export function chatView(app, id) {
   const input = h("textarea", {
     class: "composer-input",
     rows: "1",
-    placeholder: "Message Keera…",
+    placeholder: "How can I help?",
     "aria-label": "Message",
     onInput: () => {
       autosize(input);
@@ -63,7 +80,9 @@ export function chatView(app, id) {
       if (e.key === "Escape" && live()) live().abort.abort();
     },
     onPaste: (e) => {
-      const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
+      const files = [...(e.clipboardData?.files || [])].filter((f) =>
+        f.type.startsWith("image/"),
+      );
       if (files.length) {
         e.preventDefault();
         attach(files);
@@ -84,12 +103,22 @@ export function chatView(app, id) {
     },
   });
   const tray = h("div", { class: "composer-tray", hidden: true });
-  const attachBtn = iconButton(icons.plus, "Attach images", () => picker.click(), {
-    class: "composer-attach",
-  });
+  const attachBtn = iconButton(
+    icons.plus,
+    "Attach images",
+    () => picker.click(),
+    {
+      class: "composer-attach",
+    },
+  );
   const sendBtn = h(
     "button",
-    { class: "composer-send", type: "submit", title: "Send", "aria-label": "Send" },
+    {
+      class: "composer-send",
+      type: "submit",
+      title: "Send",
+      "aria-label": "Send",
+    },
     icon(icons.send),
   );
   const stopBtn = h(
@@ -119,12 +148,23 @@ export function chatView(app, id) {
     },
     tray,
     input,
-    h("div", { class: "composer-row" }, attachBtn, h("div", { class: "spacer" }), sendBtn, stopBtn),
+    h(
+      "div",
+      { class: "composer-row" },
+      attachBtn,
+      h("div", { class: "spacer" }),
+      sendBtn,
+      stopBtn,
+    ),
     picker,
   );
   const note = h("div", { class: "composer-note" });
   const hero = h("div", { class: "hero" });
-  const dock = h("div", { class: "dock" }, h("div", { class: "column" }, composer, note));
+  const dock = h(
+    "div",
+    { class: "dock" },
+    h("div", { class: "column" }, composer, note),
+  );
 
   const el = h(
     "div",
@@ -184,9 +224,13 @@ export function chatView(app, id) {
     paintHero();
     paintNote();
     paintSend();
-    document.title = conv && conv.title ? `${conv.title} · Keera Chat` : "Keera Chat";
+    document.title =
+      conv && conv.title ? `${conv.title} · Keera Chat` : "Keera Chat";
     if (!conv) {
-      replace(thread, h("div", { class: "thread-loading" }, h("div", { class: "spinner" })));
+      replace(
+        thread,
+        h("div", { class: "thread-loading" }, h("div", { class: "spinner" })),
+      );
       return;
     }
     replace(
@@ -224,9 +268,17 @@ export function chatView(app, id) {
       h(
         "div",
         { class: "hero-inner column" },
-        h("img", { class: "hero-mark", src: "/assets/favicon.svg", alt: "", width: 40, height: 40 }),
+        h("img", {
+          class: "hero-mark",
+          src: "/assets/keera.png",
+          alt: "",
+          width: 80,
+          height: 80,
+        }),
         h("h1", { class: "hero-title" }, greeting(app.me.user)),
-        noAccess ? accessNotice(app) : h("p", { class: "hero-sub" }, heroLine(app)),
+        noAccess
+          ? accessNotice(app)
+          : h("p", { class: "hero-sub" }, heroLine(app)),
       ),
     );
   }
@@ -296,14 +348,20 @@ export function chatView(app, id) {
         "div",
         { class: "bubble" },
         m.images?.length
-          ? h("div", { class: "bubble-images" }, m.images.map((url) => imageButton(url)))
+          ? h(
+              "div",
+              { class: "bubble-images" },
+              m.images.map((url) => imageButton(url)),
+            )
           : null,
         m.content ? h("div", { class: "bubble-text" }, m.content) : null,
       ),
       h(
         "div",
         { class: "msg-actions" },
-        m.content ? iconButton(icons.copy, "Copy", () => copyText(m.content)) : null,
+        m.content
+          ? iconButton(icons.copy, "Copy", () => copyText(m.content))
+          : null,
         !busy
           ? iconButton(icons.pencil, "Edit", () => {
               editing = i;
@@ -317,7 +375,10 @@ export function chatView(app, id) {
   /** editEl rewrites one of the person's messages. Sending it drops every
    *  message after it, as in other chats. */
   function editEl(m, i) {
-    const box = h("textarea", { class: "edit-input", "aria-label": "Edit your message" });
+    const box = h("textarea", {
+      class: "edit-input",
+      "aria-label": "Edit your message",
+    });
     box.value = m.content;
     const cancel = () => {
       editing = -1;
@@ -352,10 +413,22 @@ export function chatView(app, id) {
         h(
           "div",
           { class: "edit-row" },
-          h("span", { class: "edit-hint" }, "Sending replaces the replies after this message."),
+          h(
+            "span",
+            { class: "edit-hint" },
+            "Sending replaces the replies after this message.",
+          ),
           h("div", { class: "spacer" }),
-          h("button", { class: "btn btn-sm", type: "button", onClick: cancel }, "Cancel"),
-          h("button", { class: "btn btn-sm btn-primary", type: "button", onClick: save }, "Send"),
+          h(
+            "button",
+            { class: "btn btn-sm", type: "button", onClick: cancel },
+            "Cancel",
+          ),
+          h(
+            "button",
+            { class: "btn btn-sm btn-primary", type: "button", onClick: save },
+            "Send",
+          ),
         ),
       ),
     );
@@ -368,7 +441,15 @@ export function chatView(app, id) {
       // Without a sign of it, a model that only thinks looks stuck.
       body.append(h("div", { class: "thinking shimmer" }, "Thinking…"));
     } else if (m.streaming && !m.content) {
-      body.append(h("div", { class: "typing", "aria-label": "Waiting for the reply" }, h("span"), h("span"), h("span")));
+      body.append(
+        h(
+          "div",
+          { class: "typing", "aria-label": "Waiting for the reply" },
+          h("span"),
+          h("span"),
+          h("span"),
+        ),
+      );
     } else if (m.content) {
       const md = markdown(m.content);
       if (m.streaming) md.classList.add("is-streaming");
@@ -380,22 +461,32 @@ export function chatView(app, id) {
       h(
         "div",
         { class: "msg-actions" + (last ? " is-last" : "") },
-        m.content ? iconButton(icons.copy, "Copy", () => copyText(m.content)) : null,
+        m.content
+          ? iconButton(icons.copy, "Copy", () => copyText(m.content))
+          : null,
         m.reasoning
           ? iconButton(
               icons.thought,
-              m.showReasoning ? "Hide the thought process" : "Show the thought process",
+              m.showReasoning
+                ? "Hide the thought process"
+                : "Show the thought process",
               (e) => {
                 m.showReasoning = !m.showReasoning;
                 const node = replyEl(m, i);
                 e.currentTarget.closest(".msg").replaceWith(node);
-                node.querySelector(".reasoning")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+                node
+                  .querySelector(".reasoning")
+                  ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
               },
-              { attrs: { "aria-expanded": m.showReasoning ? "true" : "false" } },
+              {
+                attrs: { "aria-expanded": m.showReasoning ? "true" : "false" },
+              },
             )
           : null,
         last && !live() && app.choice && !m.error
-          ? iconButton(icons.retry, "Answer again", () => send({ regenerate: true }))
+          ? iconButton(icons.retry, "Answer again", () =>
+              send({ regenerate: true }),
+            )
           : null,
         h("span", { class: "msg-model" }, modelName(app, m.model)),
       );
@@ -415,13 +506,22 @@ export function chatView(app, id) {
               // What the model's server said, which only helps whoever runs
               // Keera, so it stays folded away.
               m.error_detail
-                ? h("details", { class: "error-detail" }, h("summary", {}, "Details"), h("div", {}, m.error_detail))
+                ? h(
+                    "details",
+                    { class: "error-detail" },
+                    h("summary", {}, "Details"),
+                    h("div", {}, m.error_detail),
+                  )
                 : null,
             ),
             last && !live() && app.choice
               ? h(
                   "button",
-                  { class: "btn btn-sm", type: "button", onClick: () => send({ regenerate: true }) },
+                  {
+                    class: "btn btn-sm",
+                    type: "button",
+                    onClick: () => send({ regenerate: true }),
+                  },
                   icon(icons.retry),
                   "Try again",
                 )
@@ -429,7 +529,9 @@ export function chatView(app, id) {
           )
         : null,
       m.stopped ? h("div", { class: "msg-note" }, "Stopped.") : null,
-      m.finish === "length" ? h("div", { class: "msg-note" }, "The reply reached its length limit.") : null,
+      m.finish === "length"
+        ? h("div", { class: "msg-note" }, "The reply reached its length limit.")
+        : null,
       actions,
       // Opened from the actions, so it shows where the person clicked.
       actions && m.reasoning && m.showReasoning
@@ -480,7 +582,12 @@ export function chatView(app, id) {
     send({ content: text, images });
   }
 
-  async function send({ content = "", images = [], edit = null, regenerate = false }) {
+  async function send({
+    content = "",
+    images = [],
+    edit = null,
+    regenerate = false,
+  }) {
     const choice = app.choice;
     if (!choice || live()) return;
     const target = conv;
@@ -493,7 +600,12 @@ export function chatView(app, id) {
     if (regenerate) {
       target.messages = target.messages.slice(0, lastUser + 1);
     } else {
-      ask = { role: "user", content, images, created_at: new Date().toISOString() };
+      ask = {
+        role: "user",
+        content,
+        images,
+        created_at: new Date().toISOString(),
+      };
       if (edit !== null) target.messages = target.messages.slice(0, edit);
       target.messages.push(ask);
     }
@@ -507,7 +619,13 @@ export function chatView(app, id) {
       streaming: true,
     };
     target.messages.push(reply);
-    const state = { conv: target, reply, abort: new AbortController(), raw: "", thought: "" };
+    const state = {
+      conv: target,
+      reply,
+      abort: new AbortController(),
+      raw: "",
+      thought: "",
+    };
     if (target.id) app.live.set(target.id, state);
     else view.pending = state;
     pinned = true;
@@ -516,7 +634,8 @@ export function chatView(app, id) {
     const paintOwner = () => {
       // Whichever view shows this conversation now, if any.
       const v = app.view;
-      if (v && v.paint && (v.id === target.id || v.pending === state)) v.paint();
+      if (v && v.paint && (v.id === target.id || v.pending === state))
+        v.paint();
     };
 
     // started is set once the server took the message. Until then, nothing
@@ -533,7 +652,11 @@ export function chatView(app, id) {
             const stored = await app.chats.find(target.id);
             if (!stored || stored.updated_at !== target.updated_at) {
               changed = true;
-              throw new ApiError(409, "changed", "This chat changed in another tab, so it was reloaded. Send again.");
+              throw new ApiError(
+                409,
+                "changed",
+                "This chat changed in another tab, so it was reloaded. Send again.",
+              );
             }
           }
           const stream = await api.chat(
@@ -559,18 +682,28 @@ export function chatView(app, id) {
               paintOwner();
             } else if (event === "done") {
               const open = reply.showReasoning;
-              Object.assign(reply, data, { streaming: false, showReasoning: open });
+              Object.assign(reply, data, {
+                streaming: false,
+                showReasoning: open,
+              });
             }
           }
         },
         () => {
-          throw new ApiError(409, "busy", "A reply is still being written in this chat, perhaps in another tab.");
+          throw new ApiError(
+            409,
+            "busy",
+            "A reply is still being written in this chat, perhaps in another tab.",
+          );
         },
       );
     } catch (err) {
       if (started && err && err.name === "AbortError") {
         reply.stopped = true;
-      } else if (err instanceof ApiError || (err && err.name === "AbortError")) {
+      } else if (
+        err instanceof ApiError ||
+        (err && err.name === "AbortError")
+      ) {
         // Refused or stopped before the server took it, so the conversation
         // is put back as it was, and a new message goes back into the
         // composer.
@@ -581,7 +714,8 @@ export function chatView(app, id) {
           paintTray();
           queueMicrotask(() => autosize(input));
         }
-        if (err instanceof ApiError && err.code !== "signed_out") toast(err.message, "bad");
+        if (err instanceof ApiError && err.code !== "signed_out")
+          toast(err.message, "bad");
       } else {
         reply.error = (err && err.message) || "The reply ended unexpectedly.";
       }
@@ -632,7 +766,10 @@ export function chatView(app, id) {
     target.key_id = choice.key.id;
     target.updated_at = now;
     try {
-      await app.chats.save({ ...target, messages: target.messages.filter((m) => m !== state.reply) });
+      await app.chats.save({
+        ...target,
+        messages: target.messages.filter((m) => m !== state.reply),
+      });
     } catch {
       // The reply is kept with it at the end, or says why it could not be.
     }
@@ -656,7 +793,9 @@ export function chatView(app, id) {
     } else {
       try {
         conv = await app.chats.find(view.id);
-        if (!conv) failed = "This chat is not in this browser. It was deleted, or kept in another browser.";
+        if (!conv)
+          failed =
+            "This chat is not in this browser. It was deleted, or kept in another browser.";
       } catch (err) {
         failed = err.message;
       }
@@ -666,7 +805,8 @@ export function chatView(app, id) {
           role: "assistant",
           model: conv.model,
           content: "",
-          error: "No reply was kept for this message. The page may have closed while it arrived.",
+          error:
+            "No reply was kept for this message. The page may have closed while it arrived.",
         });
       }
     }
@@ -678,7 +818,11 @@ export function chatView(app, id) {
           "div",
           { class: "thread-failed" },
           h("p", {}, failed),
-          h("a", { class: "btn", href: "/", onClick: (e) => app.go(e, "/") }, "Start a new chat"),
+          h(
+            "a",
+            { class: "btn", href: "/", onClick: (e) => app.go(e, "/") },
+            "Start a new chat",
+          ),
         ),
       );
       el.classList.remove("is-loading");
@@ -727,7 +871,14 @@ function titleFrom(text, images) {
 
 function greeting(user) {
   const hour = new Date().getHours();
-  const part = hour < 5 ? "Good evening" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const part =
+    hour < 5
+      ? "Good evening"
+      : hour < 12
+        ? "Good morning"
+        : hour < 18
+          ? "Good afternoon"
+          : "Good evening";
   const first = (user.name || "").trim().split(/\s+/)[0];
   return first ? `${part}, ${first}` : part;
 }
@@ -736,8 +887,17 @@ function greeting(user) {
 // names the model it describes.
 function heroLine(app) {
   const m = app.choice.model;
-  const about = m.description || (m.router ? "It picks the right model for each message" : "How can I help?");
-  return ["You're chatting with ", h("strong", {}, m.name || m.alias), ". ", sentence(about)];
+  const about =
+    m.description ||
+    (m.router
+      ? "It picks the right model for each message"
+      : "How can I help?");
+  return [
+    "You're chatting with ",
+    h("strong", {}, m.name || m.alias),
+    ": ",
+    sentence(about),
+  ];
 }
 
 function modelName(app, alias) {
@@ -750,12 +910,20 @@ function modelName(app, alias) {
 function accessNotice(app) {
   const { me } = app;
   const panel = (path, label) =>
-    h("a", { href: me.gateway_url + path, target: "_blank", rel: "noopener" }, label);
+    h(
+      "a",
+      { href: me.gateway_url + path, target: "_blank", rel: "noopener" },
+      label,
+    );
   const org = me.user.org_name || "your organisation";
   let title, body;
   if (me.keys.length) {
     title = "Your key does not allow a chat model";
-    body = ["Its rules allow no model that can chat. Ask an administrator of ", org, " to allow one."];
+    body = [
+      "Its rules allow no model that can chat. Ask an administrator of ",
+      org,
+      " to allow one.",
+    ];
   } else if (me.pending_keys) {
     title = "Your key is waiting to be activated";
     body = [
@@ -771,7 +939,9 @@ function accessNotice(app) {
       " in Keera Gateway.",
     ];
   } else {
-    title = me.inactive_keys ? "Your key is no longer active" : "You have no access yet";
+    title = me.inactive_keys
+      ? "Your key is no longer active"
+      : "You have no access yet";
     body = [
       me.inactive_keys ? "It expired or was revoked. " : "",
       "Ask an administrator of ",
@@ -779,7 +949,12 @@ function accessNotice(app) {
       " for an API key in your name. Once you have one, it works here at once.",
     ];
   }
-  return h("div", { class: "notice" }, h("strong", {}, title), h("p", {}, body));
+  return h(
+    "div",
+    { class: "notice" },
+    h("strong", {}, title),
+    h("p", {}, body),
+  );
 }
 
 /** splitThink takes the thinking out of a reply that writes it inline as

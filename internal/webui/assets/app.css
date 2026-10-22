@@ -725,10 +725,15 @@ textarea.input {
   gap: 10px;
   text-align: center;
 }
+/* Keera's portrait has a transparent background, so the circle behind her
+   keeps the crop round in either theme. */
 .hero-mark {
   display: block;
   margin-bottom: 4px;
-  border-radius: 10px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--border);
+  object-fit: cover;
 }
 .hero-title {
   font: 600 30px/1.2 var(--display);
@@ -1702,6 +1707,10 @@ h6.md-h {
   }
   .hero-title {
     font-size: 24px;
+  }
+  .hero-mark {
+    width: 64px;
+    height: 64px;
   }
   .bubble {
     max-width: 92%;

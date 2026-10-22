@@ -100,6 +100,8 @@ func contentTypeFor(p string) string {
 		return "text/javascript; charset=utf-8"
 	case ".svg":
 		return "image/svg+xml"
+	case ".png":
+		return "image/png"
 	case ".woff2":
 		return "font/woff2"
 	case ".txt":
