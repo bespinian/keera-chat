@@ -57,7 +57,7 @@ async function request(method, path, body, { signal, raw } = {}) {
 /** plain says what went wrong when the answer has no words of its own, as
  *  when something between the browser and Keera Chat refused. */
 function plain(status) {
-  if (status === 413) return "This message is too large. Make it shorter, or attach fewer or smaller images.";
+  if (status === 413) return "This chat is too large to send. Start a new chat, or attach fewer or smaller images.";
   if (status === 429) return "There are too many messages right now. Wait a moment and try again.";
   if (status >= 500) return "Keera Chat is not working right now. Try again in a little while.";
   return "Something went wrong. Reload the page and try again.";

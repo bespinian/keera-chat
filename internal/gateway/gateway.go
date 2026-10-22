@@ -110,7 +110,7 @@ func plain(status int, model string) string {
 	case status == http.StatusRequestTimeout, status == http.StatusGatewayTimeout:
 		return model + " took too long to answer. Try a shorter message, or start a new chat."
 	case status == http.StatusRequestEntityTooLarge:
-		return "Your message is too large. Make it shorter, or attach fewer or smaller images."
+		return "This chat is too large to send. Start a new chat, or attach fewer or smaller images."
 	case status == http.StatusTooManyRequests:
 		return model + " is too busy right now. Wait a moment and try again."
 	case status >= 500:
