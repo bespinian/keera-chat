@@ -242,6 +242,7 @@ export function chatView(app, id) {
     const empty = !conv || !conv.messages.length;
     el.classList.toggle("is-empty", empty && !!conv);
     el.classList.toggle("is-loading", !conv);
+    el.classList.toggle("no-access", !app.choice);
     // Without a model to send to, the composer could only refuse.
     dock.hidden = !app.choice;
     paintHero();

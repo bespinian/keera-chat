@@ -719,6 +719,12 @@ textarea.input {
   flex: 1;
   align-items: flex-start;
 }
+/* Without access there is no composer to meet, so the greeting and the
+   notice sit in the middle on their own. */
+.chat.is-empty.no-access .hero {
+  align-items: center;
+  padding-bottom: 0;
+}
 .hero-inner {
   display: grid;
   justify-items: center;
