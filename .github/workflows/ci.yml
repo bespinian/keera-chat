@@ -1,4 +1,5 @@
-# Every commit must be formatted, pass the linters, build, and pass the tests.
+# Every commit must be formatted, pass vet and the linters, build, and pass the
+# tests.
 name: CI
 
 on:
@@ -21,7 +22,7 @@ env:
 
 jobs:
   check:
-    name: Format, lint and build
+    name: Format, vet, lint and build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

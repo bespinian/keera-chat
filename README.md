@@ -115,7 +115,7 @@ some other workflow in the repository. Each release also has the image's SBOM.
 | `KEERA_CHAT_GATEWAY_INTERNAL_URL` | `KEERA_CHAT_GATEWAY_URL`  | Where Keera Chat itself reaches the gateway, where that differs, such as `http://gateway:8080` on a compose network. |
 | `KEERA_CHAT_ADDR`                 | `:8090`                   | The listener.                                                                                                        |
 | `KEERA_CHAT_SECURE_COOKIES`       | follows the scheme        | Marks the session cookie `Secure`. On when `KEERA_CHAT_PUBLIC_URL` is https.                                         |
-| `KEERA_CHAT_MAX_BODY_BYTES`       | `33554432` (32 MiB)       | The largest message. Each message brings its whole conversation, images included.                                    |
+| `KEERA_CHAT_MAX_BODY_BYTES`       | `33554432` (32 MiB)       | The largest message, at least 1 MiB. Each message brings its whole conversation, images included.                    |
 | `KEERA_CHAT_LOG_LEVEL`            | `info`                    | `debug`, `info`, `warn` or `error`.                                                                                  |
 | `KEERA_CHAT_LOG_FORMAT`           | `text`                    | `text` or `json`.                                                                                                    |
 

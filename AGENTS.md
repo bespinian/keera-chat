@@ -7,7 +7,7 @@ conventions the code follows. What it does and how to run it is in
 ## Commands
 
 ```sh
-make check                                      # test + vet + fmt-check, what CI runs besides lint
+make check                                      # test + vet + fmt-check, what CI runs besides lint and build
 make test                                       # go test -race -cover ./...
 go test -race ./internal/chat -run TestReply    # one test
 make fmt                                        # gofmt -w cmd internal
@@ -22,8 +22,8 @@ standard library, such as `errors.AsType`.
 
 ## Layout
 
-- `cmd/keera-chat` is `main`: `version` prints the build, anything else runs
-  the server.
+- `cmd/keera-chat` is `main`: `version` or `--version` prints the build,
+  anything else runs the server.
 - `internal/server` wires the rest together: it reads the config, builds the
   logger, the gateway client and the cookie box, and runs the listener until
   SIGINT or SIGTERM.
