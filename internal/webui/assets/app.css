@@ -1693,7 +1693,9 @@ h6.md-h {
       transform 0.18s ease,
       visibility 0.18s;
   }
-  .nav-open .sidebar {
+  /* As specific as the collapsed rule above, which would otherwise keep the
+     drawer shut for someone who collapsed the sidebar on a wide screen. */
+  .shell.nav-open .sidebar {
     transform: none;
     visibility: visible;
   }
