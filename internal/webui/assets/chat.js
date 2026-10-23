@@ -31,17 +31,22 @@ const maxImageSide = 2048;
 const maxImages = 10;
 
 export function chatView(app, id) {
+  // view is what app.js holds of this conversation. pending is a reply to a
+  // new chat, which has no id yet, and gone says the view was left.
   const view = {
     id,
     el: null,
-    destroy,
-    paint: null,
+    render,
+    paint,
+    retitle,
     focus: () => input.focus(),
+    destroy,
+    pending: null,
+    gone: false,
   };
   let conv = id ? null : { id: null, title: "", messages: [] };
   let attached = [];
   let editing = -1;
-  let failed = "";
 
   /* --------------------------------------------------------------- DOM */
 
@@ -73,8 +78,7 @@ export function chatView(app, id) {
       paintSend();
     },
     onKeyDown: (e) => {
-      // Enter sends and Shift+Enter breaks the line, as in every chat.
-      if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+      if (sends(e)) {
         e.preventDefault();
         submit();
       }
@@ -273,7 +277,7 @@ export function chatView(app, id) {
 
   // While a reply streams, only its own node is redrawn, once per frame.
   let queued = false;
-  view.paint = () => {
+  function paint() {
     if (queued) return;
     queued = true;
     requestAnimationFrame(() => {
@@ -286,7 +290,7 @@ export function chatView(app, id) {
       if (node) node.replaceWith(messageEl(l.reply, i));
       else render();
     });
-  };
+  }
 
   function paintHero() {
     if (!conv || conv.messages.length) {
@@ -425,9 +429,7 @@ export function chatView(app, id) {
       h(
         "div",
         { class: "msg-actions" },
-        m.content
-          ? iconButton(icons.copy, "Copy", () => copyText(m.content))
-          : null,
+        copyButton(m),
         !busy
           ? iconButton(icons.pencil, "Edit", () => {
               editing = i;
@@ -457,7 +459,7 @@ export function chatView(app, id) {
       send({ content: text, images: m.images || [], edit: i });
     };
     box.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+      if (sends(e)) {
         e.preventDefault();
         save();
       }
@@ -502,6 +504,7 @@ export function chatView(app, id) {
 
   function replyEl(m, i) {
     const last = i === conv.messages.length - 1;
+    const canRetry = last && !live() && app.choice;
     const body = h("div", { class: "msg-body" });
     if (m.streaming && !m.content && m.reasoning) {
       // Without a sign of it, a model that only thinks looks stuck.
@@ -527,9 +530,7 @@ export function chatView(app, id) {
       h(
         "div",
         { class: "msg-actions" + (last ? " is-last" : "") },
-        m.content
-          ? iconButton(icons.copy, "Copy", () => copyText(m.content))
-          : null,
+        copyButton(m),
         m.reasoning
           ? iconButton(
               icons.thought,
@@ -549,7 +550,7 @@ export function chatView(app, id) {
               },
             )
           : null,
-        last && !live() && app.choice && !m.error
+        canRetry && !m.error
           ? iconButton(icons.retry, "Answer again", () =>
               send({ regenerate: true }),
             )
@@ -580,7 +581,7 @@ export function chatView(app, id) {
                   )
                 : null,
             ),
-            last && !live() && app.choice
+            canRetry
               ? h(
                   "button",
                   {
@@ -701,7 +702,7 @@ export function chatView(app, id) {
     const paintOwner = () => {
       // Whichever view shows this conversation now, if any.
       const v = app.view;
-      if (v && v.paint && (v.id === target.id || v.pending === state))
+      if (v && (v.id === target.id || v.pending === state))
         v.paint();
     };
 
@@ -838,18 +839,18 @@ export function chatView(app, id) {
     }
     if (!state.deleted) app.saw(summary(target));
   }
-  view.render = render;
 
   /** retitle takes a title given in the sidebar, so the next save keeps it. */
-  view.retitle = (title) => {
+  function retitle(title) {
     if (!conv) return;
     conv.title = title;
     document.title = `${title} · Keera Chat`;
-  };
+  }
 
   /* ------------------------------------------------------------- setup */
 
   async function load() {
+    let failed = "";
     const l = app.live.get(view.id);
     if (l) {
       conv = l.conv;
@@ -911,6 +912,19 @@ export function chatView(app, id) {
 }
 
 /* --------------------------------------------------------------- helpers */
+
+/** sends says whether a key press sends what was written: Enter sends and
+ *  Shift+Enter breaks the line, as in every chat. */
+function sends(e) {
+  return e.key === "Enter" && !e.shiftKey && !e.isComposing;
+}
+
+/** copyButton copies a message's text, for a message that has any. */
+function copyButton(m) {
+  return m.content
+    ? iconButton(icons.copy, "Copy", () => copyText(m.content))
+    : null;
+}
 
 /** turn is a message as the server reads it. A reply that failed is marked,
  *  so the server leaves it out of what goes to the model. */

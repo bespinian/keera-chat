@@ -85,6 +85,10 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+::placeholder {
+  color: var(--faint);
+}
+
 a {
   color: var(--accent);
   text-decoration: none;
@@ -125,6 +129,18 @@ code {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* An icon beside a label. */
+.new-chat svg,
+.account > svg,
+.model-picker svg,
+.to-bottom svg,
+.menu-item > svg,
+.menu-check svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
 }
 
 /* The small capitals over a group of chats or of menu items. */
@@ -240,11 +256,6 @@ code {
   background: var(--surface-3);
   text-decoration: none;
 }
-.new-chat svg {
-  width: 16px;
-  height: 16px;
-  flex: none;
-}
 .new-chat kbd {
   margin-left: auto;
   font: 11px var(--sans);
@@ -279,9 +290,6 @@ code {
   outline: none;
   border-color: var(--accent);
   background: var(--surface);
-}
-.search-input::placeholder {
-  color: var(--faint);
 }
 
 .conv-list {
@@ -378,9 +386,6 @@ code {
   font: inherit;
   font-size: 13.5px;
 }
-.conv-rename:focus {
-  outline: none;
-}
 
 .sidebar-foot {
   padding-top: 8px;
@@ -406,10 +411,7 @@ code {
   background: var(--surface-3);
 }
 .account > svg {
-  width: 16px;
-  height: 16px;
   color: var(--faint);
-  flex: none;
 }
 .avatar {
   flex: none;
@@ -493,9 +495,6 @@ code {
   background: var(--surface-3);
 }
 .model-picker svg {
-  width: 16px;
-  height: 16px;
-  flex: none;
   color: var(--muted);
 }
 
@@ -545,7 +544,6 @@ code {
 }
 .btn-primary:hover:not(:disabled),
 .btn-danger-solid:hover:not(:disabled) {
-  text-decoration: none;
   filter: brightness(1.08);
 }
 .btn-sm {
@@ -599,9 +597,6 @@ code {
   outline-offset: -1px;
   border-color: var(--accent);
 }
-.input::placeholder {
-  color: var(--faint);
-}
 textarea.input {
   resize: vertical;
   line-height: 1.5;
@@ -653,16 +648,17 @@ textarea.input {
   gap: 18px;
   padding-block: 12px 40px;
 }
-.thread-loading {
-  display: grid;
-  place-items: center;
-  padding: 80px 0;
-}
+.thread-loading,
 .thread-failed {
   display: grid;
+  padding: 80px 0;
+}
+.thread-loading {
+  place-items: center;
+}
+.thread-failed {
   justify-items: center;
   gap: 4px;
-  padding: 80px 0;
   color: var(--muted);
   text-align: center;
 }
@@ -939,7 +935,10 @@ textarea.input {
   border-radius: 16px;
   background: var(--surface);
 }
-.edit-input {
+/* Fields drawn by the box around them, or by a border of their own, which
+   also shows the focus. */
+.edit-input,
+.composer-input {
   width: 100%;
   border: 0;
   background: none;
@@ -948,7 +947,9 @@ textarea.input {
   line-height: 1.55;
   resize: none;
 }
-.edit-input:focus {
+.conv-rename:focus,
+.edit-input:focus,
+.composer-input:focus {
   outline: none;
 }
 .edit-row {
@@ -1164,23 +1165,10 @@ h6.md-h {
   background: var(--accent-soft);
 }
 .composer-input {
-  width: 100%;
   min-height: 28px;
   max-height: 320px;
   padding: 4px 4px 2px 0;
-  border: 0;
-  background: none;
-  color: var(--text);
-  font: inherit;
-  line-height: 1.55;
-  resize: none;
   overflow-y: auto;
-}
-.composer-input:focus {
-  outline: none;
-}
-.composer-input::placeholder {
-  color: var(--faint);
 }
 .composer-row {
   display: flex;
@@ -1326,10 +1314,6 @@ h6.md-h {
 .to-bottom:hover {
   color: var(--text);
 }
-.to-bottom svg {
-  width: 16px;
-  height: 16px;
-}
 
 /* ------------------------------------------------------------------ menu */
 
@@ -1372,9 +1356,6 @@ h6.md-h {
   text-decoration: none;
 }
 .menu-item > svg {
-  flex: none;
-  width: 16px;
-  height: 16px;
   color: var(--muted);
 }
 .menu-icon-space {
@@ -1392,8 +1373,6 @@ h6.md-h {
 }
 .menu-check svg {
   display: block;
-  width: 16px;
-  height: 16px;
   color: var(--accent);
 }
 .menu-danger,
@@ -1631,8 +1610,7 @@ h6.md-h {
   }
   /* The sidebar becomes a drawer, parked off the left edge until the menu
      button brings it in. */
-  .sidebar,
-  .shell.sidebar-collapsed .sidebar {
+  .sidebar {
     position: fixed;
     top: 0;
     left: 0;
@@ -1647,8 +1625,8 @@ h6.md-h {
       transform 0.18s ease,
       visibility 0.18s;
   }
-  /* As specific as the collapsed rule above, which would otherwise keep the
-     drawer shut for someone who collapsed the sidebar on a wide screen. */
+  /* As specific as the collapsed sidebar's rule, which would otherwise keep
+     the drawer shut for someone who collapsed the sidebar on a wide screen. */
   .shell.nav-open .sidebar {
     transform: none;
     visibility: visible;
@@ -1676,7 +1654,7 @@ h6.md-h {
     display: none !important;
   }
   .topbar {
-    padding: 8px 8px;
+    padding: 8px;
     min-height: 52px;
   }
   /* The new-chat button goes to the far right, as in phone chat apps. */
@@ -1684,8 +1662,7 @@ h6.md-h {
     order: 3;
   }
   .column {
-    padding-left: 14px;
-    padding-right: 14px;
+    padding-inline: 14px;
   }
   .dock {
     padding-bottom: 10px;
@@ -1725,11 +1702,11 @@ h6.md-h {
 @media (prefers-reduced-motion: reduce) {
   .typing span,
   .conv-live,
-  .md.is-streaming > :last-child::after,
-  .shimmer {
+  .md.is-streaming > :last-child::after {
     animation: none;
   }
   .shimmer {
+    animation: none;
     color: var(--muted);
   }
 }

@@ -96,6 +96,16 @@ function fitScreen() {
 }
 
 function fatal(err) {
+  card(
+    h("div", { class: "banner banner-bad" }, err.message || String(err)),
+    h("button", { class: "btn", onClick: () => location.reload() }, icon(icons.retry), "Try again"),
+  );
+}
+
+/** card fills the page with one card under the brand, for signing in or a
+ *  start that failed. */
+function card(...children) {
+  root.className = "";
   replace(
     root,
     h(
@@ -104,27 +114,21 @@ function fatal(err) {
       h(
         "div",
         { class: "signin-card" },
-        brand(),
-        h("div", { class: "banner banner-bad" }, err.message || String(err)),
-        h("button", { class: "btn", onClick: () => location.reload() }, icon(icons.retry), "Try again"),
+        h(
+          "div",
+          { class: "signin-brand" },
+          h("img", { src: "/assets/favicon.svg", alt: "", width: 28, height: 28, class: "brand-mark" }),
+          "Keera Chat",
+        ),
+        ...children,
       ),
     ),
-  );
-}
-
-function brand() {
-  return h(
-    "div",
-    { class: "signin-brand" },
-    h("img", { src: "/assets/favicon.svg", alt: "", width: 28, height: 28, class: "brand-mark" }),
-    "Keera Chat",
   );
 }
 
 /* --------------------------------------------------------------- sign in */
 
 async function signIn() {
-  root.className = "";
   document.title = "Sign in · Keera Chat";
   const params = new URLSearchParams(location.search);
   let error = sentence(params.get("sign_in_error") || "");
@@ -159,37 +163,27 @@ async function signIn() {
     );
   }
 
-  replace(
-    root,
+  card(
+    h("h1", { class: "signin-title" }, "Welcome"),
+    h("p", { class: "signin-lead" }, "Sign in with your Keera account to start chatting."),
+    error ? h("div", { class: "banner banner-bad", role: "alert" }, error) : null,
+    ways.length
+      ? h("div", { class: "signin-providers" }, ways)
+      : cfg
+        ? h(
+            "div",
+            { class: "banner banner-warn" },
+            "This Keera Gateway has no way to sign in set up yet. Ask its administrator.",
+          )
+        : h("button", { class: "btn", onClick: () => signIn() }, icon(icons.retry), "Try again"),
     h(
-      "div",
-      { class: "signin" },
-      h(
-        "div",
-        { class: "signin-card" },
-        brand(),
-        h("h1", { class: "signin-title" }, "Welcome"),
-        h("p", { class: "signin-lead" }, "Sign in with your Keera account to start chatting."),
-        error ? h("div", { class: "banner banner-bad", role: "alert" }, error) : null,
-        ways.length
-          ? h("div", { class: "signin-providers" }, ways)
-          : cfg
-            ? h(
-                "div",
-                { class: "banner banner-warn" },
-                "This Keera Gateway has no way to sign in set up yet. Ask its administrator.",
-              )
-            : h("button", { class: "btn", onClick: () => signIn() }, icon(icons.retry), "Try again"),
-        h(
-          "p",
-          { class: "signin-note" },
-          "Your organisation decides which models you can use and what they may cost. ",
-          cfg?.gateway_url
-            ? h("a", { href: cfg.gateway_url, target: "_blank", rel: "noopener" }, "Keera Gateway")
-            : "Keera Gateway",
-          " keeps the rules.",
-        ),
-      ),
+      "p",
+      { class: "signin-note" },
+      "Your organisation decides which models you can use and what they may cost. ",
+      cfg?.gateway_url
+        ? h("a", { href: cfg.gateway_url, target: "_blank", rel: "noopener" }, "Keera Gateway")
+        : "Keera Gateway",
+      " keeps the rules.",
     ),
   );
 }
@@ -265,7 +259,7 @@ function shell() {
         { class: "topbar" },
         iconButton(icons.menu, "Open the menu", () => setNav(true), { class: "show-narrow" }),
         iconButton(icons.sidebar, "Open the sidebar", () => toggleSidebar(false), {
-          class: "when-collapsed hide-narrow",
+          class: "when-collapsed",
         }),
         iconButton(icons.newChat, "New chat", () => go(null, "/"), { class: "when-collapsed-or-narrow" }),
         els.picker,
@@ -360,7 +354,6 @@ function keysFor(alias) {
 }
 
 function paintPicker() {
-  if (!els.picker) return;
   const c = app.choice;
   els.picker.hidden = !c;
   if (!c) return;
@@ -384,7 +377,7 @@ function modelMenu(anchor) {
     onClick: () => {
       remember("model", m.alias);
       choose(m.alias, remembered("key:" + m.alias));
-      app.view?.render?.();
+      app.view?.render();
     },
   }));
   // Most people hold one key and never see this. Someone with several picks
@@ -420,7 +413,6 @@ function saw(summary) {
 }
 
 function paintList() {
-  if (!els.list) return;
   const q = els.search.value.trim().toLowerCase();
   const shown = app.conversations.filter((c) => !q || (c.title || "").toLowerCase().includes(q));
   if (!shown.length) {
@@ -601,16 +593,17 @@ function accountMenu(anchor) {
     items.push({ separator: true });
   }
 
+  const themes = { system: "Follows your system", light: "Light", dark: "Dark" };
   items.push(
     { label: "Custom instructions", icon: icons.sliders, onClick: instructions },
     {
       label: "Theme",
       icon: icons.theme,
-      hint: { system: "Follows your system", light: "Light", dark: "Dark" }[theme()],
+      hint: themes[theme()],
       onClick: () => {
         const next = { system: "light", light: "dark", dark: "system" }[theme()];
         setTheme(next);
-        toast(`Theme: ${{ system: "follows your system", light: "light", dark: "dark" }[next]}`);
+        toast(`Theme: ${themes[next].toLowerCase()}`);
       },
     },
     {
