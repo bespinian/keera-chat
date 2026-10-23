@@ -11,25 +11,24 @@
 }
 
 :root {
-  color-scheme: light;
-  --bg: #f7f7f5;
-  --surface: #ffffff;
-  --surface-2: #fafaf9;
-  --surface-3: #f1f0ed;
-  --border: #e4e2dd;
-  --border-strong: #d2cfc8;
-  --text: #17171a;
-  --muted: #6b6a66;
-  --faint: #93918b;
-  --accent: #1f5bc8;
-  --accent-soft: #e8effc;
-  --accent-fg: #ffffff;
-  --good: #1c7a4d;
-  --warn: #9a5b00;
-  --warn-soft: #fbf0dd;
-  --bad: #a92a20;
-  --bad-soft: #fbeae8;
-  --shadow: 0 1px 2px rgb(23 23 26 / 6%), 0 8px 24px -12px rgb(23 23 26 / 18%);
+  color-scheme: light dark;
+  --bg: light-dark(#f7f7f5, #121215);
+  --surface: light-dark(#ffffff, #1a1a1e);
+  --surface-2: light-dark(#fafaf9, #1f1f24);
+  --surface-3: light-dark(#f1f0ed, #26262c);
+  --border: light-dark(#e4e2dd, #2b2b32);
+  --border-strong: light-dark(#d2cfc8, #3a3a43);
+  --text: light-dark(#17171a, #ececef);
+  --muted: light-dark(#6b6a66, #9c9ba4);
+  --faint: light-dark(#93918b, #74737c);
+  --accent: light-dark(#1f5bc8, #7ea8ff);
+  --accent-soft: light-dark(#e8effc, #1a2440);
+  --accent-fg: light-dark(#ffffff, #0d1322);
+  --good: light-dark(#1c7a4d, #57cb90);
+  --warn: light-dark(#9a5b00, #dfa445);
+  --warn-soft: light-dark(#fbf0dd, #2a2113);
+  --bad: light-dark(#a92a20, #ef7b70);
+  --bad-soft: light-dark(#fbeae8, #2c1917);
   --radius: 10px;
   --radius-sm: 7px;
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
@@ -40,52 +39,26 @@
   --column: 768px;
 }
 
+/* The theme chosen in the menu, which light-dark() follows. */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* The shadow is not one colour, so it cannot use light-dark(). One rule cannot
+   match both a media query and a selector, and the CSP allows no inline script
+   to set the theme before the first paint, so dark is named twice. */
+:root {
+  --shadow: 0 1px 2px rgb(23 23 26 / 6%), 0 8px 24px -12px rgb(23 23 26 / 18%);
+}
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --bg: #121215;
-    --surface: #1a1a1e;
-    --surface-2: #1f1f24;
-    --surface-3: #26262c;
-    --border: #2b2b32;
-    --border-strong: #3a3a43;
-    --text: #ececef;
-    --muted: #9c9ba4;
-    --faint: #74737c;
-    --accent: #7ea8ff;
-    --accent-soft: #1a2440;
-    --accent-fg: #0d1322;
-    --good: #57cb90;
-    --warn: #dfa445;
-    --warn-soft: #2a2113;
-    --bad: #ef7b70;
-    --bad-soft: #2c1917;
     --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 10px 30px -14px rgb(0 0 0 / 70%);
   }
 }
-
-/* The same tokens, for dark chosen in the menu. One rule cannot match both a
-   media query and a selector, and the CSP allows no inline script to set the
-   theme before the first paint. */
 :root[data-theme="dark"] {
-  color-scheme: dark;
-  --bg: #121215;
-  --surface: #1a1a1e;
-  --surface-2: #1f1f24;
-  --surface-3: #26262c;
-  --border: #2b2b32;
-  --border-strong: #3a3a43;
-  --text: #ececef;
-  --muted: #9c9ba4;
-  --faint: #74737c;
-  --accent: #7ea8ff;
-  --accent-soft: #1a2440;
-  --accent-fg: #0d1322;
-  --good: #57cb90;
-  --warn: #dfa445;
-  --warn-soft: #2a2113;
-  --bad: #ef7b70;
-  --bad-soft: #2c1917;
   --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 10px 30px -14px rgb(0 0 0 / 70%);
 }
 
@@ -142,6 +115,27 @@ code {
   flex: 1;
 }
 
+/* A name or hint that is cut short with an ellipsis rather than wrapped. */
+.conv-title,
+.account-name,
+.account-org,
+.model-picker-name,
+.menu-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The small capitals over a group of chats or of menu items. */
+.conv-group-label,
+.menu-heading {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
 /* ------------------------------------------------------------------ boot */
 
 .boot {
@@ -174,7 +168,6 @@ code {
 .shell {
   display: grid;
   grid-template-columns: 264px minmax(0, 1fr);
-  height: 100vh;
   height: var(--screen-height, 100dvh);
   transition: grid-template-columns 0.16s ease;
 }
@@ -302,11 +295,6 @@ code {
 }
 .conv-group-label {
   padding: 12px 10px 5px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--faint);
 }
 .conv-empty {
   padding: 14px 10px;
@@ -353,11 +341,6 @@ code {
 .conv-item.is-current .conv-link {
   color: var(--accent);
   font-weight: 600;
-}
-.conv-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .conv-live {
   flex: none;
@@ -444,12 +427,6 @@ code {
   min-width: 0;
   display: grid;
 }
-.account-name,
-.account-org {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .account-name {
   font-size: 13.5px;
   font-weight: 550;
@@ -520,11 +497,6 @@ code {
   flex: none;
   color: var(--muted);
 }
-.model-picker-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 /* ------------------------------------------------------------- controls */
 
@@ -548,7 +520,7 @@ code {
     border-color 0.12s,
     opacity 0.12s;
 }
-.btn:hover:not(:disabled) {
+.btn:hover:not(:disabled, .btn-primary, .btn-danger-solid) {
   background: var(--surface-3);
   text-decoration: none;
 }
@@ -565,17 +537,14 @@ code {
   border-color: var(--accent);
   color: var(--accent-fg);
 }
-.btn-primary:hover:not(:disabled) {
-  background: var(--accent);
-  filter: brightness(1.08);
-}
 .btn-danger-solid {
   background: var(--bad);
   border-color: var(--bad);
   color: #fff;
 }
+.btn-primary:hover:not(:disabled),
 .btn-danger-solid:hover:not(:disabled) {
-  background: var(--bad);
+  text-decoration: none;
   filter: brightness(1.08);
 }
 .btn-sm {
@@ -681,10 +650,7 @@ textarea.input {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  width: 100%;
-  max-width: calc(var(--column) + 48px);
-  margin: 0 auto;
-  padding: 12px 24px 40px;
+  padding-block: 12px 40px;
 }
 .thread-loading {
   display: grid;
@@ -894,9 +860,6 @@ textarea.input {
   padding: 6px 0;
   font-size: 14px;
   font-weight: 550;
-}
-.msg-actions .icon-btn[aria-expanded="true"] {
-  color: var(--text);
 }
 .reasoning {
   margin-top: 6px;
@@ -1311,7 +1274,7 @@ h6.md-h {
 .thumb .image-open {
   width: 100%;
   height: 100%;
-  border-radius: 10px;
+  border-radius: var(--radius);
 }
 .thumb img {
   display: block;
@@ -1319,7 +1282,7 @@ h6.md-h {
   height: 100%;
   object-fit: cover;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius);
 }
 .thumb-remove {
   position: absolute;
@@ -1425,9 +1388,6 @@ h6.md-h {
 .menu-hint {
   font-size: 12px;
   color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .menu-check svg {
   display: block;
@@ -1446,11 +1406,6 @@ h6.md-h {
 }
 .menu-heading {
   padding: 8px 9px 4px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--faint);
 }
 .menu-who {
   display: grid;
@@ -1729,8 +1684,7 @@ h6.md-h {
   .topbar .when-collapsed-or-narrow {
     order: 3;
   }
-  .column,
-  .thread {
+  .column {
     padding-left: 14px;
     padding-right: 14px;
   }

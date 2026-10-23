@@ -58,6 +58,20 @@ function reason(err) {
   return "The browser said: " + ((err && err.message) || "no reason given") + ".";
 }
 
+/** keep writes a conversation and its summary in t, so the sidebar never lists
+ *  a chat other than as it is kept. */
+function keep(t, c) {
+  t.objectStore("conversations").put(c);
+  t.objectStore("summaries").put({ ...summary(c), owner: c.owner });
+}
+
+function forget(t, id) {
+  t.objectStore("conversations").delete(id);
+  t.objectStore("summaries").delete(id);
+}
+
+const newestFirst = (a, b) => (a.updated_at < b.updated_at ? 1 : -1);
+
 /** chats is the conversations and settings of one owner. */
 export function chats(owner) {
   return {
@@ -66,7 +80,7 @@ export function chats(owner) {
       const all = await run(["summaries"], "readonly", (t) =>
         t.objectStore("summaries").index("owner").getAll(owner),
       );
-      return all.sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
+      return all.sort(newestFirst);
     },
 
     /** find is a conversation, or null when this owner has none by that id. */
@@ -88,10 +102,7 @@ export function chats(owner) {
         // Without what only the page uses while showing it.
         messages: conv.messages.map(({ streaming, showReasoning, ...m }) => m),
       };
-      await run(["conversations", "summaries"], "readwrite", (t) => {
-        t.objectStore("conversations").put(kept);
-        t.objectStore("summaries").put({ ...summary(kept), owner });
-      });
+      await run(["conversations", "summaries"], "readwrite", (t) => keep(t, kept));
       keepForGood();
     },
 
@@ -104,17 +115,13 @@ export function chats(owner) {
           const c = req.result;
           if (!c || c.owner !== owner) return;
           c.title = title;
-          t.objectStore("conversations").put(c);
-          t.objectStore("summaries").put({ ...summary(c), owner });
+          keep(t, c);
         };
       });
     },
 
     remove(id) {
-      return run(["conversations", "summaries"], "readwrite", (t) => {
-        t.objectStore("conversations").delete(id);
-        t.objectStore("summaries").delete(id);
-      });
+      return run(["conversations", "summaries"], "readwrite", (t) => forget(t, id));
     },
 
     /** removeAll deletes every conversation of the owner, and keeps their
@@ -123,10 +130,7 @@ export function chats(owner) {
       return run(["conversations", "summaries"], "readwrite", (t) => {
         const req = t.objectStore("summaries").index("owner").getAllKeys(owner);
         req.onsuccess = () => {
-          for (const id of req.result) {
-            t.objectStore("conversations").delete(id);
-            t.objectStore("summaries").delete(id);
-          }
+          for (const id of req.result) forget(t, id);
         };
       });
     },
@@ -150,7 +154,7 @@ export function chats(owner) {
       });
       const conversations = all
         .filter((c) => c.owner === owner)
-        .sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1))
+        .sort(newestFirst)
         .map(({ owner, ...c }) => c);
       return {
         format: exportFormat,
@@ -167,31 +171,22 @@ export function chats(owner) {
      *  instructions are taken only when the owner has none yet. */
     async importAll(file, skip = new Set()) {
       const { conversations, instructions } = parseExport(file);
-      const result = { added: 0, updated: [], unchanged: 0 };
+      const result = { added: 0, updated: [] };
       await run(["conversations", "summaries", "settings"], "readwrite", (t) => {
-        const store = t.objectStore("conversations");
         for (const c of conversations) {
-          if (skip.has(c.id)) {
-            result.unchanged++;
-            continue;
-          }
-          const req = store.get(c.id);
+          if (skip.has(c.id)) continue;
+          const req = t.objectStore("conversations").get(c.id);
           req.onsuccess = () => {
             const here = req.result;
             if (here && here.owner === owner) {
-              if (here.updated_at >= c.updated_at) {
-                result.unchanged++;
-                return;
-              }
+              if (here.updated_at >= c.updated_at) return;
               result.updated.push(c.id);
             } else {
               // The same chat, imported by someone else who shares this browser.
               if (here) c.id = newID();
               result.added++;
             }
-            const kept = { ...c, owner };
-            store.put(kept);
-            t.objectStore("summaries").put({ ...summary(kept), owner });
+            keep(t, { ...c, owner });
           };
         }
         if (instructions) {

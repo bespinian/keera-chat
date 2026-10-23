@@ -45,7 +45,7 @@ export function chatView(app, id) {
 
   /* --------------------------------------------------------------- DOM */
 
-  const thread = h("div", { class: "thread", role: "log", "aria-live": "off" });
+  const thread = h("div", { class: "thread column", role: "log", "aria-live": "off" });
   const scroll = h("div", { class: "chat-scroll" }, thread);
   const toBottom = h(
     "button",
@@ -248,7 +248,6 @@ export function chatView(app, id) {
   function render() {
     const empty = !conv || !conv.messages.length;
     el.classList.toggle("is-empty", empty && !!conv);
-    el.classList.toggle("is-loading", !conv);
     el.classList.toggle("no-access", !app.choice);
     // Without a model to send to, the composer could only refuse.
     dock.hidden = !app.choice;
@@ -560,7 +559,7 @@ export function chatView(app, id) {
 
     return h(
       "div",
-      { class: "msg msg-reply" },
+      { class: "msg" },
       body,
       m.error
         ? h(
@@ -749,11 +748,7 @@ export function chatView(app, id) {
               reply.reasoning = state.thought + split.reasoning;
               paintOwner();
             } else if (event === "done") {
-              const open = reply.showReasoning;
-              Object.assign(reply, data, {
-                streaming: false,
-                showReasoning: open,
-              });
+              Object.assign(reply, data, { streaming: false });
             }
           }
         },
@@ -893,7 +888,6 @@ export function chatView(app, id) {
           ),
         ),
       );
-      el.classList.remove("is-loading");
       dock.hidden = true;
       return;
     }

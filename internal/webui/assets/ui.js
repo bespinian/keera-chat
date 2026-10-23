@@ -189,29 +189,38 @@ export async function copyText(text, what = "Copied") {
 
 /* ----------------------------------------------------------------- modal */
 
+/** showOverlay puts node over the page and returns the function that takes it
+ *  away again, which Escape calls too. Closing gives focus back to where it
+ *  was and passes its value on to onClose. */
+function showOverlay(node, onClose = () => {}) {
+  const previous = document.activeElement;
+  const onKey = (e) => {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      close(null);
+    }
+  };
+  const close = (value) => {
+    node.remove();
+    document.removeEventListener("keydown", onKey, true);
+    if (previous && previous.focus) previous.focus();
+    onClose(value);
+  };
+  document.body.append(node);
+  document.addEventListener("keydown", onKey, true);
+  return close;
+}
+
 /** modal shows a dialog and resolves with what onSubmit returns, or null when
  *  it is dismissed. onSubmit may throw to keep the dialog open. */
 export function modal({ title, body, submit = "Save", danger = false, onSubmit }) {
   return new Promise((resolve) => {
-    const previous = document.activeElement;
     const error = h("div", { class: "banner banner-bad", hidden: true });
     const okBtn = h(
       "button",
       { class: "btn " + (danger ? "btn-danger-solid" : "btn-primary"), type: "submit" },
       submit,
     );
-    const close = (value) => {
-      overlay.remove();
-      document.removeEventListener("keydown", onKey, true);
-      if (previous && previous.focus) previous.focus();
-      resolve(value);
-    };
-    const onKey = (e) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        close(null);
-      }
-    };
     const form = h(
       "form",
       {
@@ -250,8 +259,7 @@ export function modal({ title, body, submit = "Save", danger = false, onSubmit }
       },
       form,
     );
-    document.body.append(overlay);
-    document.addEventListener("keydown", onKey, true);
+    const close = showOverlay(overlay, resolve);
     const first = form.querySelector("textarea, input, select") || okBtn;
     first.focus();
   });
@@ -265,19 +273,7 @@ export function confirmDialog(title, text, submit) {
 /** viewImage shows an image as large as the window allows. A click anywhere
  *  or Escape closes it. */
 function viewImage(src, alt = "") {
-  const previous = document.activeElement;
-  const close = () => {
-    overlay.remove();
-    document.removeEventListener("keydown", onKey, true);
-    if (previous && previous.focus) previous.focus();
-  };
-  const onKey = (e) => {
-    if (e.key === "Escape") {
-      e.stopPropagation();
-      close();
-    }
-  };
-  const closeBtn = iconButton(icons.close, "Close", close, { class: "viewer-close" });
+  const closeBtn = iconButton(icons.close, "Close", () => close(), { class: "viewer-close" });
   const overlay = h(
     "div",
     {
@@ -285,13 +281,12 @@ function viewImage(src, alt = "") {
       role: "dialog",
       "aria-modal": "true",
       "aria-label": alt || "Image",
-      onClick: close,
+      onClick: () => close(),
     },
     h("img", { src, alt }),
     closeBtn,
   );
-  document.body.append(overlay);
-  document.addEventListener("keydown", onKey, true);
+  const close = showOverlay(overlay);
   closeBtn.focus();
 }
 
