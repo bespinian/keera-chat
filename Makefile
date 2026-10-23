@@ -64,8 +64,8 @@ GOLANGCI_LINT ?= golangci-lint
 lint:
 	@command -v $(GOLANGCI_LINT) >/dev/null 2>&1 || { \
 		echo "golangci-lint is not on PATH. Install it with:"; \
-		echo "  go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0"; \
-		echo "CI pins v2.14, so a newer one may report what CI does not."; \
+		echo "  go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0"; \
+		echo "CI pins v2.15, so a newer one may report what CI does not."; \
 		exit 1; }
 	@$(GOLANGCI_LINT) run ./...
 
@@ -89,7 +89,7 @@ image:
 # Pinned like everything else a release is built with, so two builds of one
 # commit describe it the same way. Dependabot does not read this file.
 SYFT ?= syft
-SYFT_IMAGE ?= docker.io/anchore/syft:v1.54.1
+SYFT_IMAGE ?= docker.io/anchore/syft:v1.55.0
 SBOM_DIR ?= $(BUILD_DIR)/sbom
 # CycloneDX is what the downstream scanners take. For another syft format, such
 # as spdx-json, change SBOM_FILE too.

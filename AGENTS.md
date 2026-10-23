@@ -16,7 +16,7 @@ make dev                                        # live reload against the gatewa
 make build                                      # build/keera-chat
 ```
 
-`make lint` needs golangci-lint on PATH. CI pins v2.14, so a newer one may report
+`make lint` needs golangci-lint on PATH. CI pins v2.15, so a newer one may report
 what CI does not. `go.mod` asks for Go 1.27, and the code uses its newer
 standard library, such as `errors.AsType`.
 
