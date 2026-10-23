@@ -267,7 +267,7 @@ function shell() {
         iconButton(icons.sidebar, "Open the sidebar", () => toggleSidebar(false), {
           class: "when-collapsed hide-narrow",
         }),
-        iconButton(icons.newChat, "New chat", (e) => go(e, "/"), { class: "when-collapsed-or-narrow" }),
+        iconButton(icons.newChat, "New chat", () => go(null, "/"), { class: "when-collapsed-or-narrow" }),
         els.picker,
         h("div", { class: "spacer" }),
       ),
@@ -307,7 +307,7 @@ function setNav(open) {
 function go(e, path) {
   if (e) {
     // A click with a modifier opens a tab, as links do.
-    if (e.ctrlKey || e.metaKey || e.shiftKey || e.button === 1) return;
+    if (e.ctrlKey || e.metaKey || e.shiftKey) return;
     e.preventDefault();
   }
   closeMenu();
