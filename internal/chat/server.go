@@ -119,7 +119,12 @@ type whoEntry struct {
 	at time.Time
 }
 
-const whoTTL = time.Minute
+const (
+	whoTTL = time.Minute
+	// whoSweepAt is how many people the cache holds before it drops the
+	// stale ones.
+	whoSweepAt = 4096
+)
 
 func (s *Server) whoIs(r *http.Request, token string) (gateway.Me, error) {
 	key := tokenKey(token)
@@ -136,9 +141,8 @@ func (s *Server) whoIs(r *http.Request, token string) (gateway.Me, error) {
 	}
 	s.who.mu.Lock()
 	defer s.who.mu.Unlock()
-	// Swept when it grows, rather than by a timer, since it only grows with
-	// use.
-	if len(s.who.entries) > 4096 {
+	// It is swept as it grows rather than on a timer, since only use grows it.
+	if len(s.who.entries) > whoSweepAt {
 		for k, e := range s.who.entries {
 			if now.Sub(e.at) >= whoTTL {
 				delete(s.who.entries, k)
@@ -255,10 +259,9 @@ func signedOut(w http.ResponseWriter) {
 }
 
 // gatewayFailed passes on the gateway's refusal with its own status, code
-// and words. Anything else is a failure here, logged and kept vague.
-//
-// A sign-in the gateway no longer accepts ends the session here too, even
-// when this service still had the person in its short memory of who is who.
+// and words. Anything else is a failure here, logged and kept vague. A
+// sign-in the gateway no longer accepts ends here too, even if the who-is
+// cache still holds it.
 func (s *Server) gatewayFailed(w http.ResponseWriter, r *http.Request, err error) {
 	if gateway.IsUnauthorized(err) {
 		if sess, ok := s.readSession(r); ok {
@@ -288,7 +291,8 @@ func (s *Server) failed(w http.ResponseWriter, r *http.Request, err error) {
 	writeError(w, http.StatusInternalServerError, "internal", "something went wrong in Keera Chat; try again")
 }
 
-// readJSON decodes a request body of at most the configured size.
+// readJSON decodes a request body of at most the configured size into v. When
+// it cannot, it answers the request itself and reports false.
 func (s *Server) readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, s.opts.MaxBodyBytes)
 	dec := json.NewDecoder(r.Body)

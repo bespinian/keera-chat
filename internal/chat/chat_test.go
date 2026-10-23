@@ -380,8 +380,8 @@ func TestImages(t *testing.T) {
 	}
 }
 
-// Stopping a reply in the page ends the request to the gateway, and so the
-// model's work.
+// TestStop checks that stopping a reply in the page ends the request to the
+// gateway, and so the model's work.
 func TestStop(t *testing.T) {
 	h := newHarness(t)
 	h.signIn()
@@ -407,8 +407,8 @@ func TestStop(t *testing.T) {
 	}
 }
 
-// The listener's timeouts are for small requests. A reply that streams for
-// longer must still arrive whole, and not be cut off as if it were stopped.
+// TestAReplyOutlastsTheListenerTimeouts checks that a reply streaming for
+// longer than the listener's timeouts arrives whole, not cut off as if stopped.
 func TestAReplyOutlastsTheListenerTimeouts(t *testing.T) {
 	h := newHarness(t)
 	h.signIn()
@@ -420,8 +420,7 @@ func TestAReplyOutlastsTheListenerTimeouts(t *testing.T) {
 	t.Cleanup(slow.Close)
 	h.gw.Delay = 15 * time.Millisecond // about 60 words, so close to a second
 
-	// The cookie jar ignores the port, so the session reaches the slow server
-	// too.
+	// The cookie jar ignores the port, so the session reaches the slow server.
 	_, evs := (&harness{t: t, gw: h.gw, chat: slow, c: h.c}).send(map[string]any{"messages": ask("hi")})
 	var reply Message
 	lastOf(t, evs, "done", &reply)
@@ -442,8 +441,8 @@ func TestSignOut(t *testing.T) {
 	}
 }
 
-// A sign-in ended at the gateway ends here too, even while chat still
-// remembers who the token belonged to.
+// TestRevokedAtGateway checks that a sign-in ended at the gateway ends here
+// too, even while chat still remembers who the token belonged to.
 func TestRevokedAtGateway(t *testing.T) {
 	h := newHarness(t)
 	h.signIn()

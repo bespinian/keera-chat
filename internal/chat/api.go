@@ -8,8 +8,6 @@ import (
 	"github.com/bespinian/keera-chat/internal/gateway"
 )
 
-// ------------------------------------------------------------------- me
-
 type orgOut struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
@@ -64,8 +62,7 @@ type budget struct {
 // me is what the page loads first: who this is, and what they may chat with
 // and with which key.
 func (s *Server) me(w http.ResponseWriter, r *http.Request, c *caller) {
-	ctx := r.Context()
-	access, err := s.gw.Access(ctx, c.token)
+	access, err := s.gw.Access(r.Context(), c.token)
 	if err != nil {
 		s.gatewayFailed(w, r, err)
 		return
@@ -169,13 +166,13 @@ func usableKeys(all []gateway.Key, targets []modelOut) (keys []keyOut, pending, 
 // tightest is the budget with the least left, as a share of its size.
 func tightest(scopes []gateway.Scope) *budget {
 	var best *budget
-	bestLeft := 2.0
+	var bestLeft float64
 	for _, sc := range scopes {
 		if sc.BudgetMicros <= 0 {
 			continue
 		}
 		left := 1 - float64(sc.SpendMicros)/float64(sc.BudgetMicros)
-		if left < bestLeft {
+		if best == nil || left < bestLeft {
 			bestLeft = left
 			best = &budget{Scope: sc.Type, Name: sc.Name, BudgetMicros: sc.BudgetMicros,
 				SpendMicros: sc.SpendMicros, Period: sc.Period, ResetsAt: sc.ResetsAt}

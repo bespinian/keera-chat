@@ -46,16 +46,16 @@ async function run(stores, mode, fn) {
   return new Promise((resolve, reject) => {
     const t = db.transaction(stores, mode);
     const req = fn(t);
-    t.oncomplete = () => resolve(req ? req.result : undefined);
+    t.oncomplete = () => resolve(req?.result);
     t.onerror = t.onabort = () => reject(new Error(reason(t.error)));
   });
 }
 
 function reason(err) {
-  if (err && err.name === "QuotaExceededError") {
+  if (err?.name === "QuotaExceededError") {
     return "This browser has no room left for chats. Delete some you no longer need.";
   }
-  return "The browser said: " + ((err && err.message) || "no reason given") + ".";
+  return "The browser said: " + (err?.message || "no reason given") + ".";
 }
 
 /** keep writes a conversation and its summary in t, so the sidebar never lists
@@ -99,7 +99,7 @@ export function chats(owner) {
         key_id: conv.key_id,
         created_at: conv.created_at,
         updated_at: conv.updated_at,
-        // Without what only the page uses while showing it.
+        // Leave out what the page uses only while showing it.
         messages: conv.messages.map(({ streaming, showReasoning, ...m }) => m),
       };
       await run(["conversations", "summaries"], "readwrite", (t) => keep(t, kept));
@@ -140,8 +140,8 @@ export function chats(owner) {
      *  file can be imported under another organisation too. */
     async exportAll() {
       const all = [];
-      // Through the summaries' owner index, so other people's chats, and
-      // their images, are not read.
+      // Going through the summaries' owner index means other people's chats,
+      // and their images, are never read.
       const settings = await run(["summaries", "conversations", "settings"], "readonly", (t) => {
         const ids = t.objectStore("summaries").index("owner").getAllKeys(owner);
         ids.onsuccess = () => {
@@ -160,7 +160,7 @@ export function chats(owner) {
         format: exportFormat,
         version: 1,
         exported_at: new Date().toISOString(),
-        instructions: (settings && settings.instructions) || "",
+        instructions: settings?.instructions || "",
         conversations,
       };
     },
@@ -192,7 +192,7 @@ export function chats(owner) {
         if (instructions) {
           const req = t.objectStore("settings").get(owner);
           req.onsuccess = () => {
-            if (req.result && req.result.instructions) return;
+            if (req.result?.instructions) return;
             t.objectStore("settings").put({ ...req.result, instructions, owner });
             result.instructions = true;
           };
@@ -204,7 +204,7 @@ export function chats(owner) {
 
     async settings() {
       const s = await run(["settings"], "readonly", (t) => t.objectStore("settings").get(owner));
-      return { instructions: (s && s.instructions) || "" };
+      return { instructions: s?.instructions || "" };
     },
 
     async saveSettings(settings) {
@@ -305,9 +305,9 @@ export function newID() {
 }
 
 /** exclusive runs fn while no other tab of this browser runs it for the same
- *  conversation, so two tabs cannot each write a reply into it, and one of
- *  them be lost. Where the browser has no locks, as on plain http away from
- *  this machine, fn just runs. */
+ *  conversation, so two tabs cannot both write a reply into it and lose one.
+ *  Where the browser has no locks, as on plain http away from this machine,
+ *  fn just runs. */
 export function exclusive(id, fn, busy) {
   if (!id || !navigator.locks) return fn();
   return navigator.locks.request("keera.chat.reply." + id, { ifAvailable: true }, (lock) =>
@@ -321,7 +321,7 @@ let persisting = false;
  *  space. Some browsers ask the person first, so it is asked once a chat is
  *  kept, not when the page opens. */
 function keepForGood() {
-  if (persisting || !navigator.storage || !navigator.storage.persist) return;
+  if (persisting || !navigator.storage?.persist) return;
   persisting = true;
   navigator.storage
     .persisted()

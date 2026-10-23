@@ -35,7 +35,7 @@ const root = document.getElementById("root");
 /** app is the state every part of the page shares. */
 const app = {
   me: null,
-  // chats keeps this person's conversations in this browser. See store.js.
+  // The person's conversations in this browser. See store.js.
   chats: null,
   conversations: [],
   settings: { instructions: "" },
@@ -432,7 +432,7 @@ function paintList() {
     if (!groups.has(g)) groups.set(g, []);
     groups.get(g).push(c);
   }
-  const current = app.view && app.view.id;
+  const current = app.view?.id;
   replace(
     els.list,
     [...groups].map(([label, convs]) =>
@@ -489,15 +489,15 @@ function convMenu(anchor, c, item) {
           return toast(err.message, "bad");
         }
         app.conversations = app.conversations.filter((x) => x.id !== c.id);
-        if (app.view && app.view.id === c.id) go(null, "/");
+        if (app.view?.id === c.id) go(null, "/");
         else paintList();
       },
     },
   ]);
 }
 
-/** drop stops a reply whose conversation is being deleted. Otherwise the
- *  reply would save its conversation again when it ends. */
+/** drop stops a reply whose conversation is being deleted, so it does not
+ *  save the conversation again when it ends. */
 function drop(live) {
   if (!live) return;
   live.deleted = true;
@@ -519,7 +519,7 @@ function renameInline(c, item) {
         // too, and save it whole, so they must not keep the old title.
         const l = app.live.get(c.id);
         if (l) l.conv.title = title;
-        if (app.view && app.view.id === c.id) app.view.retitle(title);
+        if (app.view?.id === c.id) app.view.retitle(title);
       } catch (err) {
         toast(err.message, "bad");
       }
@@ -576,7 +576,7 @@ function accountMenu(anchor) {
       u.name ? h("span", {}, u.email) : null,
     ),
   ];
-  const b = app.choice && app.choice.key.budget;
+  const b = app.choice?.key.budget;
   if (b) items.push(budgetEl(b));
   items.push({ separator: true });
 
@@ -762,7 +762,7 @@ async function deleteAll() {
   );
   if (!ok) return;
   for (const l of app.live.values()) drop(l);
-  drop(app.view && app.view.pending);
+  drop(app.view?.pending);
   try {
     await app.chats.removeAll();
   } catch (err) {

@@ -6,8 +6,7 @@ import (
 	"unicode"
 )
 
-// turn is one message of a conversation, as the page sends it. The page
-// keeps the conversation, so it sends all of it with every message.
+// turn is one message of a conversation, as the page sends it.
 type turn struct {
 	Role    string   `json:"role"` // "user" or "assistant"
 	Content string   `json:"content"`
@@ -72,8 +71,7 @@ func wire(instructions string, msgs []turn) []wireMessage {
 	for i, m := range msgs {
 		switch m.Role {
 		case "user":
-			last := i == len(msgs)-1
-			if !last && !answered(msgs[i+1]) {
+			if i < len(msgs)-1 && !answered(msgs[i+1]) {
 				continue
 			}
 			out = append(out, wireMessage{Role: "user", Content: content(m.Content, m.Images)})
@@ -130,8 +128,8 @@ func splitThink(text string) (answer, thought string) {
 }
 
 // imagePrefixes are the formats every API that reads images accepts, as the
-// data: URLs the page sends. chat.js has the same list, and maxImages too,
-// and store.js checks imported files against both.
+// data: URLs the page sends. chat.js has the same list and maxImages, and
+// store.js checks imported files against both.
 var imagePrefixes = []string{
 	"data:image/png;base64,", "data:image/jpeg;base64,",
 	"data:image/gif;base64,", "data:image/webp;base64,",

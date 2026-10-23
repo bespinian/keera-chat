@@ -1,6 +1,5 @@
-/* Keera Chat. One stylesheet, no build step. The tokens are Keera Gateway's
-   panel's, so the two read as one product. Tokens first, then layout, then
-   components. */
+/* Keera Chat's one stylesheet, with no build step. Its tokens are Keera
+   Gateway's panel's, so the two read as one product. */
 
 @font-face {
   font-family: "Space Grotesk";
@@ -935,8 +934,8 @@ textarea.input {
   border-radius: 16px;
   background: var(--surface);
 }
-/* Fields drawn by the box around them, or by a border of their own, which
-   also shows the focus. */
+/* These fields are drawn by the box around them, or by a border of their own,
+   which shows the focus instead of an outline. */
 .edit-input,
 .composer-input {
   width: 100%;

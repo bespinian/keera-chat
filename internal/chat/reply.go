@@ -31,9 +31,9 @@ type replyIn struct {
 	Messages []turn `json:"messages"`
 }
 
-// reply has the model answer a conversation through the gateway, and streams
-// the answer back. Chat keeps nothing: the page keeps the conversation, sends
-// all of it with each message, and keeps the reply.
+// reply has the model answer a conversation through the gateway and streams
+// the answer back. Chat keeps nothing: the page sends the whole conversation
+// with each message, and keeps the reply.
 //
 // The page reads server-sent events: "delta" for each piece of the answer,
 // then "done" with the whole reply. A refusal by the gateway, such as a spent
@@ -225,8 +225,8 @@ func (s *Server) stream(r *http.Request, res *http.Response, out *events, reply 
 		select {
 		case c, ok := <-chunks:
 			if !ok {
-				// The channel is closed after readErr is set, so it is safe
-				// to read here.
+				// readErr is set before the channel closes, so reading it is
+				// safe here.
 				switch {
 				case ctx.Err() != nil:
 					reply.Stopped = true

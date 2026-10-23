@@ -11,9 +11,10 @@ export class ApiError extends Error {
   }
 }
 
-/** onSignedOut is called once a request finds the sign-in gone, so the page
- *  can go back to the sign-in screen. */
 let onSignedOut = () => {};
+
+/** whenSignedOut sets fn to be called once a request finds the sign-in gone,
+ *  so the page can go back to the sign-in screen. */
 export function whenSignedOut(fn) {
   onSignedOut = fn;
 }
@@ -38,8 +39,8 @@ async function request(method, path, body, { signal, raw } = {}) {
     throw new ApiError(0, "offline", "Keera Chat did not answer. Check your connection and try again.");
   }
   if (!res.ok) {
-    let code = "",
-      message = plain(res.status);
+    let code = "";
+    let message = plain(res.status);
     try {
       const data = await res.json();
       code = data.error?.code || "";
@@ -50,8 +51,7 @@ async function request(method, path, body, { signal, raw } = {}) {
     if (res.status === 401 && code === "signed_out") onSignedOut();
     throw new ApiError(res.status, code, sentence(message));
   }
-  if (raw) return res;
-  return res.json();
+  return raw ? res : res.json();
 }
 
 /** plain says what went wrong when the answer has no words of its own, as

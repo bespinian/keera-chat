@@ -61,8 +61,8 @@ type Error struct {
 	// Message is what the person is told.
 	Message string
 	// Detail is the text Message stands in for, when it was not shown: a
-	// model server's own words, which the gateway passes on as they came, or
-	// the gateway's own words when they were not meant for a person.
+	// model server's words, passed on by the gateway, or the gateway's own
+	// when they were not meant for a person.
 	Detail string
 	// plain is set when Message is chat's own wording, not the gateway's.
 	plain bool
@@ -71,11 +71,10 @@ type Error struct {
 func (e *Error) Error() string { return e.Message }
 
 // NewError words an error for a person. The gateway's own refusals carry a
-// code and are mostly written for people, so they are shown as they are.
-// Anything else, such as an error from a model server, can be technical, and
-// a few of the gateway's codes are about its insides or worded for agents.
-// For those, the person gets a plain sentence and the text is kept as the
-// detail.
+// code and are written for people, so they are shown as they are. Anything
+// else, such as a model server's error, and the few codes that are about the
+// gateway's insides or worded for agents, get a plain sentence instead, with
+// the text kept as the detail.
 func NewError(status int, code Code, msg string) *Error {
 	e := &Error{Status: status, Code: string(code), Message: msg}
 	if code == "" || msg == "" || reworded[e.Code] {

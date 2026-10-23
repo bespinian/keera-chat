@@ -37,8 +37,8 @@ export function svg(tag, props, ...children) {
 }
 
 /** idpMarks are the identity providers' logos, as the gateway's panel has
- *  them. They are keyed by the names an operator picks in the gateway's
- *  KEERA_OIDC_PROVIDERS, so the obvious spellings of each vendor (idpAliases)
+ *  them, keyed by the names an operator picks in the gateway's
+ *  KEERA_OIDC_PROVIDERS. idpAliases lets the obvious spellings of each vendor
  *  share the artwork. */
 const idpMarks = {
   google: {

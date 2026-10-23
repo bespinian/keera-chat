@@ -123,9 +123,9 @@ func Handler() http.Handler {
 		name := path.Clean(r.URL.Path)
 		f, ok := files[name]
 		if !ok {
-			// A missing asset is a 404. The page would hand the browser HTML
-			// where it expected JavaScript, which fails later and less
-			// clearly.
+			// A missing asset is a 404: the page in its place would hand the
+			// browser HTML where it expected JavaScript, which fails later and
+			// less clearly.
 			if strings.HasPrefix(name, "/assets/") {
 				http.NotFound(w, r)
 				return

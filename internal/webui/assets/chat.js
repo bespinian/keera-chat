@@ -50,7 +50,11 @@ export function chatView(app, id) {
 
   /* --------------------------------------------------------------- DOM */
 
-  const thread = h("div", { class: "thread column", role: "log", "aria-live": "off" });
+  const thread = h("div", {
+    class: "thread column",
+    role: "log",
+    "aria-live": "off",
+  });
   const scroll = h("div", { class: "chat-scroll" }, thread);
   const toBottom = h(
     "button",
@@ -82,7 +86,7 @@ export function chatView(app, id) {
         e.preventDefault();
         submit();
       }
-      if (e.key === "Escape" && live()) live().abort.abort();
+      if (e.key === "Escape") live()?.abort.abort();
     },
     onPaste: (e) => {
       const files = [...(e.clipboardData?.files || [])].filter((f) =>
@@ -112,9 +116,7 @@ export function chatView(app, id) {
     icons.plus,
     "Attach images",
     () => picker.click(),
-    {
-      class: "composer-attach",
-    },
+    { class: "composer-attach" },
   );
   const sendBtn = h(
     "button",
@@ -134,12 +136,12 @@ export function chatView(app, id) {
       title: "Stop",
       "aria-label": "Stop the reply",
       hidden: true,
-      onClick: () => live() && live().abort.abort(),
+      onClick: () => live()?.abort.abort(),
     },
     icon(icons.stop),
   );
   // meter fills as the conversation uses up the model's context. Each
-  // circle's length is 100, so the gap left is what is still free.
+  // circle's pathLength is 100, so the dash offset is the share still free.
   const ring = (cls) =>
     svg("circle", {
       class: cls,
@@ -235,10 +237,9 @@ export function chatView(app, id) {
     if (pinned) scroll.scrollTop = scroll.scrollHeight;
     toBottom.hidden = pinned || !conv || !conv.messages.length;
   }
-  // The thread also changes size without a redraw: a phone's keyboard opens
-  // or closes and takes the space with it, and images load after their
-  // message is drawn. Without this, the end slides out of view and the
-  // person has to scroll down to it.
+  // The thread also changes size without a redraw, when a phone's keyboard
+  // opens or closes or an image loads after its message is drawn. Without
+  // this, the end would slide out of view.
   const resized = new ResizeObserver(stick);
   resized.observe(scroll);
   resized.observe(thread);
@@ -246,7 +247,7 @@ export function chatView(app, id) {
   /* -------------------------------------------------------- rendering */
 
   function live() {
-    return conv && conv.id ? app.live.get(conv.id) : view.pending;
+    return conv?.id ? app.live.get(conv.id) : view.pending;
   }
 
   function render() {
@@ -259,8 +260,7 @@ export function chatView(app, id) {
     paintNote();
     paintSend();
     paintMeter();
-    document.title =
-      conv && conv.title ? `${conv.title} · Keera Chat` : "Keera Chat";
+    document.title = conv?.title ? `${conv.title} · Keera Chat` : "Keera Chat";
     if (!conv) {
       replace(
         thread,
@@ -297,7 +297,6 @@ export function chatView(app, id) {
       hero.replaceChildren();
       return;
     }
-    const noAccess = !app.choice;
     replace(
       hero,
       h(
@@ -311,9 +310,9 @@ export function chatView(app, id) {
           height: 80,
         }),
         h("h1", { class: "hero-title" }, greeting(app.me.user)),
-        noAccess
-          ? accessNotice(app)
-          : h("p", { class: "hero-sub" }, heroLine(app)),
+        app.choice
+          ? h("p", { class: "hero-sub" }, heroLine(app))
+          : accessNotice(app),
       ),
     );
   }
@@ -339,13 +338,11 @@ export function chatView(app, id) {
 
   /** paintMeter shows how much of the chosen model's context the
    *  conversation used, as the model server counted it for the last reply.
-   *  A router has no context of its own, and a conversation from before
-   *  replies were counted has no count, so neither shows one.
-   *
-   *  The count is shown only when the chosen model made it, since models
-   *  count tokens differently. A last reply that failed may have been refused
-   *  as too long, which an earlier count would contradict, so it hides the
-   *  meter too. A stopped reply keeps the count from before it. */
+   *  It shows nothing for a router, which has no context of its own, for a
+   *  conversation from before replies were counted, or for a count another
+   *  model made, since models count tokens differently. A failed last reply
+   *  hides it too, as it may have been refused for being too long, which an
+   *  earlier count would contradict. A stopped reply keeps the earlier count. */
   function paintMeter() {
     const model = app.choice?.model;
     const max = model?.context;
@@ -702,8 +699,7 @@ export function chatView(app, id) {
     const paintOwner = () => {
       // Whichever view shows this conversation now, if any.
       const v = app.view;
-      if (v && (v.id === target.id || v.pending === state))
-        v.paint();
+      if (v && (v.id === target.id || v.pending === state)) v.paint();
     };
 
     // started is set once the server took the message. Until then, nothing
@@ -762,15 +758,12 @@ export function chatView(app, id) {
         },
       );
     } catch (err) {
-      if (started && err && err.name === "AbortError") {
+      const aborted = err?.name === "AbortError";
+      if (started && aborted) {
         reply.stopped = true;
-      } else if (
-        err instanceof ApiError ||
-        (err && err.name === "AbortError")
-      ) {
+      } else if (err instanceof ApiError || aborted) {
         // Refused or stopped before the server took it, so the conversation
-        // is put back as it was, and a new message goes back into the
-        // composer.
+        // goes back to how it was, and a new message back into the composer.
         target.messages = before;
         if (ask && edit === null && app.view === view && !input.value) {
           input.value = content;
@@ -781,7 +774,7 @@ export function chatView(app, id) {
         if (err instanceof ApiError && err.code !== "signed_out")
           toast(err.message, "bad");
       } else {
-        reply.error = (err && err.message) || "The reply ended unexpectedly.";
+        reply.error = err?.message || "The reply ended unexpectedly.";
       }
     } finally {
       reply.streaming = false;
@@ -930,7 +923,7 @@ function copyButton(m) {
  *  so the server leaves it out of what goes to the model. */
 function turn(m) {
   const t = { role: m.role, content: m.content || "" };
-  if (m.images && m.images.length) t.images = m.images;
+  if (m.images?.length) t.images = m.images;
   if (m.error) t.failed = true;
   return t;
 }
@@ -959,8 +952,8 @@ function greeting(user) {
   return first ? `${part}, ${first}` : part;
 }
 
-// A description alone reads as if it were about chat itself, so the line
-// names the model it describes.
+/** heroLine names the model before its description, since a description
+ *  alone reads as if it were about chat itself. */
 function heroLine(app) {
   const m = app.choice.model;
   const about =
@@ -978,7 +971,7 @@ function heroLine(app) {
 
 function modelName(app, alias) {
   const m = app.me.models.find((x) => x.alias === alias);
-  return (m && m.name) || alias || "";
+  return m?.name || alias || "";
 }
 
 /** accessNotice explains why there is nothing to chat with, and who can

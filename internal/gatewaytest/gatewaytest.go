@@ -197,7 +197,8 @@ func (g *Gateway) me(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *Gateway) access(w http.ResponseWriter, r *http.Request) {
-	resets := time.Date(time.Now().Year(), time.Now().Month()+1, 1, 0, 0, 0, 0, time.UTC)
+	now := time.Now()
+	resets := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.UTC)
 	writeJSON(w, 200, map[string]any{"keys": []map[string]any{
 		{"id": KeyID, "org_id": OrgID, "name": "Laptop", "prefix": "kg_ab12", "kind": "standard",
 			"state": "active", "project_name": "Research",
@@ -295,8 +296,8 @@ func (g *Gateway) chat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	words := func(field, text string) bool {
-		for _, w := range strings.SplitAfter(text, " ") {
-			if !send(map[string]any{field: w}, nil) {
+		for _, word := range strings.SplitAfter(text, " ") {
+			if !send(map[string]any{field: word}, nil) {
 				return false
 			}
 		}
@@ -313,7 +314,6 @@ func (g *Gateway) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.Contains(lower, "slow") {
-		// send stops the loop once the request is cancelled.
 		for range 100000 {
 			if !send(map[string]any{"content": "and on "}, nil) {
 				return

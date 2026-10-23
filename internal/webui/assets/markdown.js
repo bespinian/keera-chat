@@ -1,9 +1,9 @@
 // A small Markdown renderer for replies: paragraphs, headings, lists, quotes,
 // tables, fenced code and the usual inline marks.
 //
-// It builds DOM nodes from text and never hands a string to the browser as
-// HTML, so a model cannot inject markup or script into the page, whatever it
-// writes. Links open only for http, https and mailto.
+// It builds DOM nodes and never parses a string as HTML, so nothing a model
+// writes can become markup or script. Links open only for http, https and
+// mailto.
 //
 // It is forgiving on purpose: it runs on every frame while a reply streams
 // in, so half a table or an unclosed code fence must still draw sensibly.
@@ -95,7 +95,7 @@ function blocks(lines) {
     // A paragraph runs until a blank line or the start of another block.
     const para = [line];
     i++;
-    while (i < lines.length && lines[i].trim() && !startsBlock(lines, i)) {
+    while (i < lines.length && lines[i].trim() && !startsBlock(lines[i])) {
       para.push(lines[i]);
       i++;
     }
@@ -104,8 +104,7 @@ function blocks(lines) {
   return out;
 }
 
-function startsBlock(lines, i) {
-  const line = lines[i];
+function startsBlock(line) {
   return (
     FENCE.test(line) ||
     HEADING.test(line) ||
@@ -126,7 +125,8 @@ function parseList(lines, i) {
   const indent = first[1].length;
   const ordered = /\d/.test(first[2]);
   const list = h(ordered ? "ol" : "ul", {});
-  if (ordered && parseInt(first[2], 10) !== 1) list.setAttribute("start", parseInt(first[2], 10));
+  const start = parseInt(first[2], 10);
+  if (ordered && start !== 1) list.setAttribute("start", start);
   let loose = false;
 
   while (i < lines.length) {
@@ -166,7 +166,7 @@ function parseList(lines, i) {
       }
       // A line that is not indented but starts no block carries on the
       // item's paragraph, as models often write.
-      if (!startsBlock(lines, i)) {
+      if (!startsBlock(line)) {
         body.push(line);
         i++;
         continue;
@@ -253,8 +253,7 @@ function inline(text) {
   let buf = "";
   const flush = () => {
     if (!buf) return;
-    const lines = buf.split("\n");
-    lines.forEach((l, k) => {
+    buf.split("\n").forEach((l, k) => {
       if (k) out.push(h("br"));
       if (l) out.push(document.createTextNode(l));
     });
