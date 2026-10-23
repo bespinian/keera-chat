@@ -114,20 +114,23 @@ func plain(status int, code, model string) string {
 	if model == "" {
 		model = "The model"
 	}
-	switch {
-	case status == http.StatusBadRequest:
+	switch status {
+	case http.StatusBadRequest:
 		return model + " could not answer this message. Try changing it, or start a new chat."
-	case status == http.StatusForbidden:
+	case http.StatusUnauthorized:
+		return model + " is not set up correctly. Choose another model, or ask your administrator."
+	case http.StatusForbidden:
 		return "You are not allowed to use this. Choose another model, or ask your administrator."
-	case status == http.StatusNotFound:
+	case http.StatusNotFound:
 		return model + " is no longer available. Choose another model."
-	case status == http.StatusRequestTimeout, status == http.StatusGatewayTimeout:
+	case http.StatusRequestTimeout, http.StatusGatewayTimeout:
 		return model + " took too long to answer. Try a shorter message, or start a new chat."
-	case status == http.StatusRequestEntityTooLarge:
+	case http.StatusRequestEntityTooLarge:
 		return "This chat is too large to send. Start a new chat, or attach fewer or smaller images."
-	case status == http.StatusTooManyRequests:
+	case http.StatusTooManyRequests:
 		return model + " is too busy right now. Wait a moment and try again."
-	case status >= 500:
+	}
+	if status >= 500 {
 		return model + " is not working right now. Try again in a little while."
 	}
 	return "Something went wrong. Try again."
@@ -146,11 +149,15 @@ func (c *Code) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+// unauthenticated is the code the gateway gives a sign-in it does not accept.
+const unauthenticated = "unauthenticated"
+
 // IsUnauthorized reports whether the gateway no longer accepts the sign-in:
-// it expired, was ended, or the person was turned off.
+// it expired, was ended, or the person was turned off. Another 401 is not
+// about the sign-in: the chat route passes on a model server's as it came.
 func IsUnauthorized(err error) bool {
 	e, ok := errors.AsType[*Error](err)
-	return ok && e.Status == http.StatusUnauthorized
+	return ok && e.Status == http.StatusUnauthorized && e.Code == unauthenticated
 }
 
 // ---------------------------------------------------------------- types
@@ -305,7 +312,15 @@ func (c *Client) Chat(ctx context.Context, token, keyID string, body []byte) (*h
 	// Set explicitly, so nothing between here and the model gzips the
 	// stream and holds tokens back in a buffer.
 	req.Header.Set("Accept-Encoding", "identity")
-	return c.send(req, token)
+	res, err := c.send(req, token)
+	// A 401 that is not about the sign-in is the model server's, such as for
+	// the credentials the gateway holds for it. Its words are for whoever
+	// runs Keera.
+	if e, ok := errors.AsType[*Error](err); ok && e.Status == http.StatusUnauthorized &&
+		e.Code != unauthenticated && !e.plain {
+		e.Message, e.Detail, e.plain = plain(e.Status, e.Code, ""), e.Message, true
+	}
+	return res, err
 }
 
 func (c *Client) call(ctx context.Context, method, path, token string, in, out any) error {
@@ -350,7 +365,10 @@ func (c *Client) send(req *http.Request, token string) (*http.Response, error) {
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	named(req)
+	// The gateway reads X-Keera-Client first, and User-Agent where that is
+	// not set.
+	req.Header.Set("X-Keera-Client", ClientName)
+	req.Header.Set("User-Agent", ClientName)
 	res, err := c.http.Do(req)
 	if err != nil {
 		return nil, unreachable(err)
@@ -373,13 +391,6 @@ func readError(res *http.Response) error {
 	}
 	_ = json.NewDecoder(io.LimitReader(res.Body, 1<<16)).Decode(&env)
 	return NewError(res.StatusCode, env.Error.Code, env.Error.Message)
-}
-
-// named says which client is calling. The gateway reads X-Keera-Client
-// first, and User-Agent where that is not set.
-func named(req *http.Request) {
-	req.Header.Set("X-Keera-Client", ClientName)
-	req.Header.Set("User-Agent", ClientName)
 }
 
 // unreachable keeps a cancelled call recognisable as one, and words every

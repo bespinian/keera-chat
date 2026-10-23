@@ -64,7 +64,8 @@ standard library, such as `errors.AsType`.
   takes out inline thinking), and streams server-sent events: `delta` for each
   piece, then `done` with the whole reply. A gateway refusal, such as a spent
   budget, arrives as a `done` whose reply has an error, and the page keeps it in
-  the conversation. Stopping the reply in the page ends the request context,
+  the conversation. A stream that ends without `done` was cut on the way,
+  and the page marks the reply as cut off. Stopping the reply in the page ends the request context,
   and with it the request to the gateway.
 
 ## The page

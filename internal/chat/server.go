@@ -161,9 +161,8 @@ func (s *Server) forget(token string) {
 
 // ------------------------------------------------------------ middleware
 
-// contentSecurityPolicy matches the gateway panel's: scripts and connections
-// from this origin only, no framing. Images may be data: URLs, since that is
-// how attached images travel.
+// contentSecurityPolicy matches the gateway panel's, except that images may
+// be data: URLs, since that is how attached images travel.
 const contentSecurityPolicy = "default-src 'self'; " +
 	"script-src 'self'; " +
 	"style-src 'self' 'unsafe-inline'; " +

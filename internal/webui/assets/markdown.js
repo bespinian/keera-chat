@@ -175,7 +175,7 @@ function parseList(lines, i) {
     }
     const parts = blocks(body);
     // A tight list keeps its items as plain lines, not paragraphs.
-    if (!loose && parts[0] && parts[0].tagName === "P") {
+    if (!loose && parts[0]?.tagName === "P") {
       parts.splice(0, 1, ...parts[0].childNodes);
     }
     list.append(h("li", {}, parts));

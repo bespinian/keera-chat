@@ -2,6 +2,7 @@ package chat
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -82,7 +83,7 @@ func (s *Server) reply(w http.ResponseWriter, r *http.Request, c *caller) {
 			reply.Error, reply.ErrorDetail = e.Naming(in.ModelName).Message, e.Detail
 		}
 	default:
-		s.stream(r, res, out, &reply, in.ModelName)
+		s.stream(ctx, res, out, &reply, in.ModelName)
 	}
 	reply.Content, reply.Reasoning = finish(reply.Content, reply.Reasoning)
 	out.send("done", reply)
@@ -159,9 +160,8 @@ type delta struct {
 // stream copies the model's answer to the page as it arrives and gathers it
 // into reply. When the person stops the reply, the request's context ends,
 // which also ends the request to the gateway, and so the model's work.
-func (s *Server) stream(r *http.Request, res *http.Response, out *events, reply *Message, model string) {
+func (s *Server) stream(ctx context.Context, res *http.Response, out *events, reply *Message, model string) {
 	defer func() { _ = res.Body.Close() }()
-	ctx := r.Context()
 
 	var text, thought strings.Builder
 	apply := func(c chunk) {

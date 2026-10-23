@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"strings"
 	"testing"
@@ -39,13 +40,15 @@ func newHarness(t *testing.T) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var app *Server
+	// Chat needs its own address before it can serve, so the handler is set
+	// once the server has one.
+	var handler http.Handler
 	chatSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		app.Handler().ServeHTTP(w, r)
+		handler.ServeHTTP(w, r)
 	}))
 	t.Cleanup(chatSrv.Close)
-	app = New(Options{PublicURL: chatSrv.URL, GatewayURL: gwSrv.URL, MaxBodyBytes: 4 << 20},
-		gateway.New(gwSrv.URL), box, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	handler = New(Options{PublicURL: chatSrv.URL, GatewayURL: gwSrv.URL, MaxBodyBytes: 4 << 20},
+		gateway.New(gwSrv.URL), box, slog.New(slog.NewTextHandler(io.Discard, nil))).Handler()
 
 	jar, _ := cookiejar.New(nil)
 	return &harness{t: t, gw: gw, chat: chatSrv, c: &http.Client{Jar: jar}}
@@ -317,6 +320,9 @@ func TestReply(t *testing.T) {
 		"too long":          {"Is this too long?", "Keera Speed", "This conversation is too long for Keera Speed.", "prompt is too long", ""},
 		"too long, no name": {"Is this too long?", "", "This conversation is too long for keera-speed.", "prompt is too long", ""},
 		"broken":            {"Is this broken?", "Keera Speed", "Something went wrong", "CUDA error", "Let me think about "},
+		// A model server's 401 is about its credentials, not the person's
+		// sign-in, which stays.
+		"credentials": {"Are your credentials OK?", "Keera Speed", "Keera Speed is not set up correctly", "Incorrect API key", ""},
 	} {
 		_, evs = h.send(map[string]any{"messages": ask(c.ask), "model_name": c.model})
 		var reply Message
@@ -326,6 +332,9 @@ func TestReply(t *testing.T) {
 		}
 		if reply.Content != c.content {
 			t.Errorf("%s: content = %q, want %q", name, reply.Content, c.content)
+		}
+		if status := h.do("GET", "/api/me", nil, nil); status != http.StatusOK {
+			t.Errorf("%s: /api/me = %d after the reply", name, status)
 		}
 	}
 
@@ -469,8 +478,39 @@ func TestCallbackChecksState(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = res.Body.Close()
-	if loc := res.Header.Get("Location"); !strings.HasPrefix(loc, "/?sign_in_error=") {
-		t.Fatalf("a callback this browser did not start went to %q", loc)
+	if loc := res.Header.Get("Location"); loc != "/" {
+		t.Fatalf("a callback this browser did not start went to %q, want the page", loc)
+	}
+	// The reason comes with the sign-in screen's config, once.
+	var cfg struct {
+		SignInError string `json:"sign_in_error"`
+	}
+	h.do("GET", "/auth/config", nil, &cfg)
+	if !strings.Contains(cfg.SignInError, "started in another browser") {
+		t.Fatalf("sign_in_error = %q, want why the sign-in failed", cfg.SignInError)
+	}
+	cfg.SignInError = ""
+	h.do("GET", "/auth/config", nil, &cfg)
+	if cfg.SignInError != "" {
+		t.Fatalf("sign_in_error = %q the second time, want it shown once", cfg.SignInError)
+	}
+}
+
+// TestSignInErrorNotFromURL checks that the sign-in screen's error cannot be
+// set by a link, so nobody can put their own words on it.
+func TestSignInErrorNotFromURL(t *testing.T) {
+	h := newHarness(t)
+	var cfg map[string]any
+	h.do("GET", "/auth/config?sign_in_error=call+us", nil, &cfg)
+	if cfg["sign_in_error"] != "" {
+		t.Fatalf("sign_in_error = %v, want none", cfg["sign_in_error"])
+	}
+	// A cookie chat did not seal is ignored too.
+	u, _ := url.Parse(h.chat.URL + "/auth")
+	h.c.Jar.SetCookies(u, []*http.Cookie{{Name: errorCookie, Value: "Y2FsbCB1cw", Path: "/auth"}})
+	h.do("GET", "/auth/config", nil, &cfg)
+	if cfg["sign_in_error"] != "" {
+		t.Fatalf("sign_in_error = %v from a forged cookie, want none", cfg["sign_in_error"])
 	}
 }
 

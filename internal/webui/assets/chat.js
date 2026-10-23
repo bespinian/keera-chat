@@ -30,6 +30,8 @@ const imageTypes = "image/png,image/jpeg,image/gif,image/webp";
 const maxImageSide = 2048;
 const maxImages = 10;
 
+const cutOff = "The reply was cut off before it finished. Try again.";
+
 export function chatView(app, id) {
   // view is what app.js holds of this conversation. pending is a reply to a
   // new chat, which has no id yet, and gone says the view was left.
@@ -337,12 +339,10 @@ export function chatView(app, id) {
   }
 
   /** paintMeter shows how much of the chosen model's context the
-   *  conversation used, as the model server counted it for the last reply.
-   *  It shows nothing for a router, which has no context of its own, for a
-   *  conversation from before replies were counted, or for a count another
-   *  model made, since models count tokens differently. A failed last reply
-   *  hides it too, as it may have been refused for being too long, which an
-   *  earlier count would contradict. A stopped reply keeps the earlier count. */
+   *  conversation used, as the model server last counted it. It hides for a
+   *  router, which has no context of its own, for a count another model made,
+   *  since models count tokens differently, and after a failed reply, which
+   *  may have been refused for being too long. */
   function paintMeter() {
     const model = app.choice?.model;
     const max = model?.context;
@@ -705,6 +705,7 @@ export function chatView(app, id) {
     // started is set once the server took the message. Until then, nothing
     // is kept and the conversation can go back to how it was.
     let started = false;
+    let finished = false;
     let changed = false;
     try {
       await exclusive(
@@ -746,8 +747,13 @@ export function chatView(app, id) {
               paintOwner();
             } else if (event === "done") {
               Object.assign(reply, data, { streaming: false });
+              finished = true;
             }
           }
+          // The server always ends with "done", even for a refusal. A stream
+          // that ends without it was cut on the way, such as by a proxy, and
+          // what arrived is only part of the reply.
+          if (!finished) reply.error = cutOff;
         },
         () => {
           throw new ApiError(
@@ -773,6 +779,11 @@ export function chatView(app, id) {
         }
         if (err instanceof ApiError && err.code !== "signed_out")
           toast(err.message, "bad");
+      } else if (started) {
+        // The browser's words for a broken stream, such as "network error",
+        // help only whoever runs Keera, so they are the detail.
+        reply.error = cutOff;
+        reply.error_detail = err?.message;
       } else {
         reply.error = err?.message || "The reply ended unexpectedly.";
       }
@@ -941,13 +952,11 @@ function titleFrom(text, images) {
 function greeting(user) {
   const hour = new Date().getHours();
   const part =
-    hour < 5
+    hour < 5 || hour >= 18
       ? "Good evening"
       : hour < 12
         ? "Good morning"
-        : hour < 18
-          ? "Good afternoon"
-          : "Good evening";
+        : "Good afternoon";
   const first = (user.name || "").trim().split(/\s+/)[0];
   return first ? `${part}, ${first}` : part;
 }
@@ -1042,19 +1051,18 @@ function splitThink(text) {
 }
 
 async function readImage(file) {
-  const url = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
   // Also checks that the file is an image at all.
   const bitmap = await createImageBitmap(file);
   const scale = maxImageSide / Math.max(bitmap.width, bitmap.height);
   // A GIF is kept as it is, because redrawing it would drop its animation.
   if (scale >= 1 || file.type === "image/gif") {
     bitmap.close();
-    return url;
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
   }
   const canvas = h("canvas", {
     width: Math.round(bitmap.width * scale),

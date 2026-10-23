@@ -14,6 +14,7 @@ import (
 	"io/fs"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -155,8 +156,12 @@ func acceptsGzip(header string) bool {
 		if !strings.EqualFold(strings.TrimSpace(name), "gzip") {
 			continue
 		}
-		q := strings.ReplaceAll(strings.TrimSpace(params), " ", "")
-		return q != "q=0" && q != "q=0.0" && q != "q=0.00" && q != "q=0.000"
+		q, ok := strings.CutPrefix(strings.ReplaceAll(params, " ", ""), "q=")
+		if !ok {
+			return true
+		}
+		w, err := strconv.ParseFloat(q, 64)
+		return err != nil || w > 0
 	}
 	return false
 }

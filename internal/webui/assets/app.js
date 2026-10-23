@@ -52,14 +52,14 @@ const app = {
 /* ------------------------------------------------------------------ boot */
 
 async function boot() {
-  whenSignedOut(() => signIn());
+  whenSignedOut(signIn);
   try {
     app.me = await api.me();
     app.chats = chats(app.me.user.id + "|" + app.me.user.org_id);
     [app.conversations, app.settings] = await Promise.all([app.chats.list(), app.chats.settings()]);
   } catch (err) {
     // whenSignedOut has already shown the sign-in screen. Showing it again
-    // would lose the sign-in error, which the first one took from the URL.
+    // would lose the sign-in error, which the server gives only once.
     if (err instanceof ApiError && err.code === "signed_out") return;
     if (err instanceof ApiError && err.status === 401) return signIn();
     return fatal(err);
@@ -130,15 +130,14 @@ function card(...children) {
 
 async function signIn() {
   document.title = "Sign in · Keera Chat";
-  const params = new URLSearchParams(location.search);
-  let error = sentence(params.get("sign_in_error") || "");
-  if (params.has("sign_in_error")) history.replaceState(null, "", "/");
-
+  // Why the last sign-in failed comes with the config, and only once.
+  let error = "";
   let cfg = null;
   try {
     cfg = await api.authConfig();
+    error = sentence(cfg.sign_in_error || "");
   } catch (err) {
-    error = error || err.message;
+    error = err.message;
   }
 
   const ways = [];

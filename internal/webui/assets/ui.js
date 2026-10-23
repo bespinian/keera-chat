@@ -203,7 +203,7 @@ function showOverlay(node, onClose = () => {}) {
   const close = (value) => {
     node.remove();
     document.removeEventListener("keydown", onKey, true);
-    if (previous && previous.focus) previous.focus();
+    previous?.focus?.();
     onClose(value);
   };
   document.body.append(node);
@@ -351,7 +351,7 @@ export function menu(anchor, items, { up = false, wide = false } = {}) {
           "aria-checked": item.checked === undefined ? null : String(!!item.checked),
           onClick: (e) => {
             closeMenu();
-            if (item.onClick) item.onClick(e);
+            item.onClick?.(e);
           },
         },
         item.icon ? icon(item.icon) : h("span", { class: "menu-icon-space" }),

@@ -28,10 +28,16 @@ import (
 const (
 	sessionCookie = "keera_chat"
 	loginCookie   = "keera_chat_login"
+	// errorCookie holds why a sign-in failed, until the sign-in screen
+	// shows it.
+	errorCookie = "keera_chat_error"
 
 	// loginTTL is how long a sign-in may take, the same as the gateway
 	// allows: people leave a consent screen open.
 	loginTTL = 15 * time.Minute
+
+	// errorTTL is long enough for the page to load and ask for the reason.
+	errorTTL = time.Minute
 
 	// callbackPath is where the gateway sends the browser back to. The
 	// gateway accepts it only for the address it was told in KEERA_CHAT_URL,
@@ -64,10 +70,17 @@ func (s *Server) authConfig(w http.ResponseWriter, r *http.Request) {
 	if cfg.SSO {
 		providers = append(providers, cfg.Providers...)
 	}
+	// Why the last sign-in failed is shown once. It is cleared only here, so
+	// a gateway that did not answer above does not lose it.
+	var signInError string
+	if s.readSealed(r, errorCookie, &signInError) {
+		s.clearCookie(w, errorCookie, "/auth")
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"providers":   providers,
-		"passkeys":    cfg.Passkeys,
-		"gateway_url": s.opts.GatewayURL,
+		"providers":     providers,
+		"passkeys":      cfg.Passkeys,
+		"gateway_url":   s.opts.GatewayURL,
+		"sign_in_error": signInError,
 	})
 }
 
@@ -101,32 +114,32 @@ func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	switch {
 	case !ok || time.Now().Unix() > p.Expires:
-		failSignIn(w, r, "this sign-in took too long, or was started in another browser; try again")
+		s.failSignIn(w, r, "this sign-in took too long, or was started in another browser; try again")
 		return
 	// The state ties the code to the sign-in this browser started, so
 	// nobody can send someone a link that signs them in as somebody else.
 	case subtle.ConstantTimeCompare([]byte(q.Get("state")), []byte(p.State)) != 1:
-		failSignIn(w, r, "this sign-in was not the one this browser started; try again")
+		s.failSignIn(w, r, "this sign-in was not the one this browser started; try again")
 		return
 	case q.Get("code") == "":
-		failSignIn(w, r, "the sign-in came back without a code; try again")
+		s.failSignIn(w, r, "the sign-in came back without a code; try again")
 		return
 	}
 
 	tok, err := s.gw.Redeem(r.Context(), q.Get("code"), p.Verifier, "Keera Chat")
 	if err != nil {
-		failSignIn(w, r, err.Error())
+		s.failSignIn(w, r, err.Error())
 		return
 	}
 	// whoIs checks the new token and caches who it is for the page's first
 	// /api/me.
 	if _, err := s.whoIs(r, tok.Token); err != nil {
-		failSignIn(w, r, err.Error())
+		s.failSignIn(w, r, err.Error())
 		return
 	}
 	ttl := time.Until(tok.ExpiresAt)
 	if ttl <= 0 {
-		failSignIn(w, r, "the gateway issued a sign-in that has already expired; try again")
+		s.failSignIn(w, r, "the gateway issued a sign-in that has already expired; try again")
 		return
 	}
 	if err := s.setSealed(w, sessionCookie, "/", session{Token: tok.Token,
@@ -150,9 +163,15 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-// failSignIn sends the browser to the sign-in screen with the reason.
-func failSignIn(w http.ResponseWriter, r *http.Request, msg string) {
-	http.Redirect(w, r, "/?sign_in_error="+url.QueryEscape(msg), http.StatusFound)
+// failSignIn sends the browser to the sign-in screen, with the reason in a
+// sealed cookie rather than the URL. A reason in the URL would let anyone
+// send a link that shows their own words on this sign-in screen.
+func (s *Server) failSignIn(w http.ResponseWriter, r *http.Request, msg string) {
+	if err := s.setSealed(w, errorCookie, "/auth", msg, errorTTL); err != nil {
+		s.failed(w, r, err)
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusFound)
 }
 
 // ------------------------------------------------------------ cookies

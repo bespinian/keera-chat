@@ -221,6 +221,9 @@ func (g *Gateway) access(w http.ResponseWriter, r *http.Request) {
 //     gateway's words for agents,
 //   - "overloaded" is refused by the model server, in vLLM's words, which
 //     the gateway passes on,
+//   - "credentials" is refused by the model server for the credentials the
+//     gateway holds for it, in OpenAI's words, which the gateway passes on
+//     with the model server's 401,
 //   - "broken" fails partway through the reply, as a model server can,
 //   - "slow" streams for a long time, to be stopped,
 //   - anything else gets a reply that shows off the formatting, with the
@@ -262,6 +265,12 @@ func (g *Gateway) chat(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 503, map[string]any{"error": map[string]any{
 			"message": "The engine is currently overloaded, please try again later.",
 			"type":    "ServiceUnavailableError", "code": 503,
+		}})
+		return
+	case strings.Contains(lower, "credentials"):
+		writeJSON(w, 401, map[string]any{"error": map[string]any{
+			"message": "Incorrect API key provided: sk-proj-****abcd.",
+			"type":    "invalid_request_error", "code": "invalid_api_key",
 		}})
 		return
 	}
