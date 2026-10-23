@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
-	"net/url"
 	"slices"
 	"strings"
 	"testing"
@@ -421,40 +420,15 @@ func TestAReplyOutlastsTheListenerTimeouts(t *testing.T) {
 	t.Cleanup(slow.Close)
 	h.gw.Delay = 15 * time.Millisecond // about 60 words, so close to a second
 
-	b, _ := json.Marshal(map[string]any{"model": "keera-speed", "key_id": gatewaytest.KeyID, "messages": ask("hi")})
-	req, _ := http.NewRequest("POST", slow.URL+"/api/chat", bytes.NewReader(b))
-	req.Header.Set("X-Keera-Chat", "1")
-	for _, c := range h.c.Jar.Cookies(mustURL(t, h.chat.URL)) {
-		req.AddCookie(c)
-	}
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	body, err := io.ReadAll(res.Body)
-	_ = res.Body.Close()
-	if err != nil {
-		t.Fatalf("the stream broke off: %v", err)
-	}
-	i := bytes.LastIndex(body, []byte("event: done\ndata: "))
-	if i < 0 {
-		t.Fatalf("no done event in %d bytes", len(body))
-	}
+	// The cookie jar ignores the port, so the session reaches the slow server
+	// too.
+	_, evs := (&harness{t: t, gw: h.gw, chat: slow, c: h.c}).send(map[string]any{"messages": ask("hi")})
 	var reply Message
-	_ = json.Unmarshal(bytes.TrimSpace(body[i+len("event: done\ndata: "):]), &reply)
+	lastOf(t, evs, "done", &reply)
 	if reply.Stopped || !strings.HasSuffix(reply.Content, "Anything else?") {
 		t.Fatalf("the reply was cut short: stopped=%v, ends %q", reply.Stopped,
 			reply.Content[max(0, len(reply.Content)-30):])
 	}
-}
-
-func mustURL(t *testing.T, raw string) *url.URL {
-	t.Helper()
-	u, err := url.Parse(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return u
 }
 
 func TestSignOut(t *testing.T) {

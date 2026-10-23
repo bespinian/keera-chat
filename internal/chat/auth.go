@@ -118,7 +118,9 @@ func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
 		failSignIn(w, r, err.Error())
 		return
 	}
-	if _, err := s.gw.Me(r.Context(), tok.Token); err != nil {
+	// whoIs checks the new token and caches who it is for the page's first
+	// /api/me.
+	if _, err := s.whoIs(r, tok.Token); err != nil {
 		failSignIn(w, r, err.Error())
 		return
 	}

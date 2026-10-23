@@ -139,7 +139,7 @@ func (g *Gateway) login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "a sign-in needs cli_redirect, cli_challenge and cli_state", 400)
 		return
 	}
-	code := random()
+	code := rand.Text()
 	g.mu.Lock()
 	g.codes[code] = q.Get("cli_challenge")
 	g.mu.Unlock()
@@ -162,7 +162,7 @@ func (g *Gateway) redeem(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 401, "invalid_code", "this sign-in has expired or was already completed")
 		return
 	}
-	token := "keera_cli_" + random()
+	token := "keera_cli_" + rand.Text()
 	g.tokens[token] = true
 	writeJSON(w, 200, map[string]any{"token": token, "expires_at": time.Now().Add(30 * 24 * time.Hour)})
 }
@@ -241,22 +241,23 @@ func (g *Gateway) chat(w http.ResponseWriter, r *http.Request) {
 
 	model, _ := body["model"].(string)
 	last := lastText(body)
+	lower := strings.ToLower(last)
 	switch {
 	case model != "keera-speed" && model != "keera-think" && model != "keera-auto":
 		writeError(w, 403, "model_not_allowed", "this key may not use "+model)
 		return
-	case strings.Contains(strings.ToLower(last), "budget"):
+	case strings.Contains(lower, "budget"):
 		writeError(w, 429, "budget_exceeded",
 			"the monthly budget of project Research is spent; it starts again on 1 November")
 		return
-	case strings.Contains(strings.ToLower(last), "too long"):
+	case strings.Contains(lower, "too long"):
 		writeJSON(w, 400, map[string]any{"error": map[string]any{
 			"message": "prompt is too long: 140000 tokens > 131072 maximum. That is the least this " +
 				"request can be, and '" + model + "' holds no more; compact the conversation or start a new one",
 			"type": "invalid_request_error", "code": "context_length_exceeded",
 		}})
 		return
-	case strings.Contains(strings.ToLower(last), "overloaded"):
+	case strings.Contains(lower, "overloaded"):
 		writeJSON(w, 503, map[string]any{"error": map[string]any{
 			"message": "The engine is currently overloaded, please try again later.",
 			"type":    "ServiceUnavailableError", "code": 503,
@@ -302,7 +303,7 @@ func (g *Gateway) chat(w http.ResponseWriter, r *http.Request) {
 		return true
 	}
 
-	if strings.Contains(strings.ToLower(last), "broken") {
+	if strings.Contains(lower, "broken") {
 		if words("content", "Let me think about ") {
 			b, _ := json.Marshal(map[string]any{"error": map[string]any{
 				"message": "CUDA error: an illegal memory access was encountered", "code": 500,
@@ -311,8 +312,9 @@ func (g *Gateway) chat(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if strings.Contains(strings.ToLower(last), "slow") {
-		for i := 0; r.Context().Err() == nil && i < 100000; i++ {
+	if strings.Contains(lower, "slow") {
+		// send stops the loop once the request is cancelled.
+		for range 100000 {
 			if !send(map[string]any{"content": "and on "}, nil) {
 				return
 			}
@@ -379,12 +381,6 @@ func oneLine(s string) string {
 
 func bearer(r *http.Request) string {
 	return strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-}
-
-func random() string {
-	var b [24]byte
-	_, _ = rand.Read(b[:])
-	return base64.RawURLEncoding.EncodeToString(b[:])
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

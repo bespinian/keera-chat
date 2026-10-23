@@ -31,10 +31,10 @@ type Config struct {
 	// defaults to GatewayURL.
 	GatewayInternalURL string
 
-	// SecretKey seals the session cookie. Changing it signs everyone out.
+	// SecretKey seals chat's cookies. Changing it signs everyone out.
 	SecretKey string
 
-	// SecureCookies marks the session cookie Secure. On by default when the
+	// SecureCookies marks chat's cookies Secure. On by default when the
 	// public URL is https; off lets a plain-http setup on localhost sign in.
 	SecureCookies bool
 

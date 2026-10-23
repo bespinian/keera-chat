@@ -1,12 +1,12 @@
-// Package secret seals the session cookie, which carries a person's gateway
-// sign-in. The key lives only in the process environment, so a cookie jar
-// stolen from a backup holds ciphertext.
+// Package secret seals chat's cookies: the session cookie, which carries a
+// person's gateway sign-in, and the sign-in's PKCE verifier on its way. The
+// key lives only in the process environment, so a cookie jar stolen from a
+// backup holds ciphertext.
 package secret
 
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/rand"
 	"crypto/sha256"
 	"errors"
 )
@@ -29,7 +29,7 @@ func New(key string) (*Box, error) {
 	if err != nil {
 		return nil, err
 	}
-	aead, err := cipher.NewGCM(block)
+	aead, err := cipher.NewGCMWithRandomNonce(block)
 	if err != nil {
 		return nil, err
 	}
@@ -39,18 +39,12 @@ func New(key string) (*Box, error) {
 // Seal encrypts plaintext for the place name names. The name is
 // authenticated, so a ciphertext moved to another place fails to open.
 func (b *Box) Seal(name string, plaintext []byte) []byte {
-	nonce := make([]byte, b.aead.NonceSize())
-	_, _ = rand.Read(nonce) // never fails; see crypto/rand.Read
-	return b.aead.Seal(nonce, nonce, plaintext, []byte(name))
+	return b.aead.Seal(nil, nil, plaintext, []byte(name))
 }
 
 // Open decrypts what Seal produced for the same name.
 func (b *Box) Open(name string, sealed []byte) ([]byte, error) {
-	n := b.aead.NonceSize()
-	if len(sealed) < n {
-		return nil, errors.New("secret: ciphertext is truncated")
-	}
-	out, err := b.aead.Open(nil, sealed[:n], sealed[n:], []byte(name))
+	out, err := b.aead.Open(nil, nil, sealed, []byte(name))
 	if err != nil {
 		return nil, errors.New("secret: cannot decrypt with the configured key")
 	}

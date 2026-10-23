@@ -301,22 +301,12 @@ func (c *Client) Chat(ctx context.Context, token, keyID string, body []byte) (*h
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
-	named(req)
 	// Set explicitly, so nothing between here and the model gzips the
 	// stream and holds tokens back in a buffer.
 	req.Header.Set("Accept-Encoding", "identity")
-	res, err := c.http.Do(req)
-	if err != nil {
-		return nil, unreachable(err)
-	}
-	if res.StatusCode/100 != 2 {
-		defer func() { _ = res.Body.Close() }()
-		return nil, readError(res)
-	}
-	return res, nil
+	return c.send(req, token)
 }
 
 func (c *Client) call(ctx context.Context, method, path, token string, in, out any) error {
@@ -338,20 +328,13 @@ func (c *Client) call(ctx context.Context, method, path, token string, in, out a
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
 	req.Header.Set("Accept", "application/json")
-	named(req)
 
-	res, err := c.http.Do(req)
+	res, err := c.send(req, token)
 	if err != nil {
-		return unreachable(err)
+		return err
 	}
 	defer func() { _ = res.Body.Close() }()
-	if res.StatusCode/100 != 2 {
-		return readError(res)
-	}
 	if out == nil {
 		_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 1<<16))
 		return nil
@@ -360,6 +343,24 @@ func (c *Client) call(ctx context.Context, method, path, token string, in, out a
 		return fmt.Errorf("reading Keera Gateway's answer to %s %s: %w", method, path, err)
 	}
 	return nil
+}
+
+// send makes req with the person's token, if there is one, and turns a
+// refusal into an *Error. The caller closes the body of the response.
+func (c *Client) send(req *http.Request, token string) (*http.Response, error) {
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	named(req)
+	res, err := c.http.Do(req)
+	if err != nil {
+		return nil, unreachable(err)
+	}
+	if res.StatusCode/100 != 2 {
+		defer func() { _ = res.Body.Close() }()
+		return nil, readError(res)
+	}
+	return res, nil
 }
 
 // readError reads the gateway's error envelope, {"error": {"message", ...}}.
