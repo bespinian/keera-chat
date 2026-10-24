@@ -47,6 +47,9 @@ any other request, and the person needs nothing but a browser.
   the tightest budget above the person's key is spent. A refusal, such as a
   spent budget, shows in the conversation in the gateway's own words.
 
+How to use it is in the [user docs](https://docs.keera.ch/use/chat), which the
+account menu links to as **Help**.
+
 ## Run it
 
 ### Next to a gateway on this machine

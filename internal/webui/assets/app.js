@@ -606,10 +606,11 @@ function accountMenu(anchor) {
       },
     },
     {
-      label: "My access in Keera Gateway",
+      label: "Keera Gateway",
       icon: icons.external,
       href: app.me.gateway_url + "/access",
     },
+    { label: "Help", icon: icons.help, href: "https://docs.keera.ch/use/chat" },
     { separator: true },
     { label: "Export chats", icon: icons.download, onClick: exportChats },
     { label: "Import chats", icon: icons.upload, onClick: importChats },
