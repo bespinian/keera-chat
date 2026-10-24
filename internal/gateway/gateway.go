@@ -31,6 +31,10 @@ const ClientName = "keera-chat"
 // gave an answer chat cannot read.
 const NoAnswer = "Keera Gateway did not answer; try again in a moment"
 
+// TooLarge is what a person is told when a conversation is too large to send,
+// whether chat or the gateway refused it.
+const TooLarge = "This chat is too large to send. Start a new chat, or attach fewer or smaller images."
+
 // callTimeout bounds every call but the chat itself, whose reply can take
 // minutes.
 const callTimeout = 20 * time.Second
@@ -78,9 +82,15 @@ func (e *Error) Error() string { return e.Message }
 func NewError(status int, code Code, msg string) *Error {
 	e := &Error{Status: status, Code: string(code), Message: msg}
 	if code == "" || msg == "" || reworded[e.Code] {
-		e.Message, e.Detail, e.plain = plain(status, e.Code, ""), msg, true
+		e.reword()
 	}
 	return e
+}
+
+// reword puts chat's own wording in place of the message, which is kept as
+// the detail.
+func (e *Error) reword() {
+	e.Message, e.Detail, e.plain = plain(e.Status, e.Code, ""), e.Message, true
 }
 
 // Naming puts the model's name in chat's own wording, so the person knows
@@ -126,7 +136,7 @@ func plain(status int, code, model string) string {
 	case http.StatusRequestTimeout, http.StatusGatewayTimeout:
 		return model + " took too long to answer. Try a shorter message, or start a new chat."
 	case http.StatusRequestEntityTooLarge:
-		return "This chat is too large to send. Start a new chat, or attach fewer or smaller images."
+		return TooLarge
 	case http.StatusTooManyRequests:
 		return model + " is too busy right now. Wait a moment and try again."
 	}
@@ -318,7 +328,7 @@ func (c *Client) Chat(ctx context.Context, token, keyID string, body []byte) (*h
 	// runs Keera.
 	if e, ok := errors.AsType[*Error](err); ok && e.Status == http.StatusUnauthorized &&
 		e.Code != unauthenticated && !e.plain {
-		e.Message, e.Detail, e.plain = plain(e.Status, e.Code, ""), e.Message, true
+		e.reword()
 	}
 	return res, err
 }

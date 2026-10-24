@@ -77,9 +77,7 @@ export function chats(owner) {
   return {
     /** list is the summaries, the most recently used first. */
     async list() {
-      const all = await run(["summaries"], "readonly", (t) =>
-        t.objectStore("summaries").index("owner").getAll(owner),
-      );
+      const all = await run(["summaries"], "readonly", (t) => t.objectStore("summaries").index("owner").getAll(owner));
       return all.sort(newestFirst);
     },
 
@@ -310,9 +308,7 @@ export function newID() {
  *  fn just runs. */
 export function exclusive(id, fn, busy) {
   if (!id || !navigator.locks) return fn();
-  return navigator.locks.request("keera.chat.reply." + id, { ifAvailable: true }, (lock) =>
-    lock ? fn() : busy(),
-  );
+  return navigator.locks.request("keera.chat.reply." + id, { ifAvailable: true }, (lock) => (lock ? fn() : busy()));
 }
 
 let persisting = false;

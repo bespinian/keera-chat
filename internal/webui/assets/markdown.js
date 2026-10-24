@@ -13,7 +13,13 @@ import { h, icon, icons, copyText } from "./ui.js";
 /** render turns Markdown into an element. */
 export function render(text) {
   const root = h("div", { class: "md" });
-  root.append(...blocks(String(text || "").replace(/\r\n?/g, "\n").split("\n")));
+  root.append(
+    ...blocks(
+      String(text || "")
+        .replace(/\r\n?/g, "\n")
+        .split("\n"),
+    ),
+  );
   return root;
 }
 
@@ -105,13 +111,7 @@ function blocks(lines) {
 }
 
 function startsBlock(line) {
-  return (
-    FENCE.test(line) ||
-    HEADING.test(line) ||
-    QUOTE.test(line) ||
-    RULE.test(line) ||
-    LIST.test(line)
-  );
+  return FENCE.test(line) || HEADING.test(line) || QUOTE.test(line) || RULE.test(line) || LIST.test(line);
 }
 
 function indentOf(line) {
@@ -196,21 +196,32 @@ function table(rows) {
   const align = cells(rows[1]).map((c) =>
     c.startsWith(":") && c.endsWith(":") ? "center" : c.endsWith(":") ? "right" : "",
   );
-  const cell = (tag, text, j) =>
-    h(tag, { style: align[j] ? { textAlign: align[j] } : null }, inline(text));
+  const cell = (tag, text, j) => h(tag, { style: align[j] ? { textAlign: align[j] } : null }, inline(text));
   return h(
     "div",
     { class: "md-table" },
     h(
       "table",
       {},
-      h("thead", {}, h("tr", {}, head.map((c, j) => cell("th", c, j)))),
+      h(
+        "thead",
+        {},
+        h(
+          "tr",
+          {},
+          head.map((c, j) => cell("th", c, j)),
+        ),
+      ),
       h(
         "tbody",
         {},
         rows.slice(2).map((r) => {
           const cs = cells(r);
-          return h("tr", {}, head.map((_, j) => cell("td", cs[j] || "", j)));
+          return h(
+            "tr",
+            {},
+            head.map((_, j) => cell("td", cs[j] || "", j)),
+          );
         }),
       ),
     ),
@@ -244,7 +255,8 @@ function codeBlock(code, lang) {
 /* ---------------------------------------------------------------- inline */
 
 const ESCAPABLE = /[\\`*_{}[\]()#+\-.!~|>]/;
-const LINK = /^!?\[((?:[^\][]|\[[^\][]*\])*)\]\(\s*<?([^\s<>()]+(?:\([^\s()]*\))?[^\s<>()]*)>?(?:\s+["'][^"']*["'])?\s*\)/;
+const LINK =
+  /^!?\[((?:[^\][]|\[[^\][]*\])*)\]\(\s*<?([^\s<>()]+(?:\([^\s()]*\))?[^\s<>()]*)>?(?:\s+["'][^"']*["'])?\s*\)/;
 const AUTOLINK = /^https?:\/\/[^\s<>"]+/;
 
 /** inline renders the marks inside one block, line breaks kept. */
@@ -345,7 +357,9 @@ function emphasis(text, i) {
     const inner = text.slice(from, j);
     const after = text[j + marker.length] || "";
     const okClose =
-      inner && !/\s$/.test(inner) && !(c === "_" && /\w/.test(after)) &&
+      inner &&
+      !/\s$/.test(inner) &&
+      !(c === "_" && /\w/.test(after)) &&
       // A single * must not be half of a closing **.
       (double || after !== c || text[j + 2] === c);
     if (okClose && !(inner.includes("`") && (inner.split("`").length - 1) % 2)) {
@@ -360,9 +374,5 @@ function emphasis(text, i) {
 function link(href, label) {
   const safe = /^(https?:|mailto:)/i.test(href);
   if (!safe) return document.createTextNode(label || href);
-  return h(
-    "a",
-    { href, target: "_blank", rel: "noopener noreferrer" },
-    label === null ? href : inline(label),
-  );
+  return h("a", { href, target: "_blank", rel: "noopener noreferrer" }, label === null ? href : inline(label));
 }

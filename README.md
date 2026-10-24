@@ -178,8 +178,6 @@ make sbom    # build/sbom/keera-chat.cdx.json, for the image
 A `v*` tag releases: CI builds and pushes the image, signs its provenance and
 publishes the release with the SBOM.
 
-See [AGENTS.md](AGENTS.md) for the layout and conventions.
-
 ## Licence
 
 Keera Chat is source-available under the [Keera Community Licence

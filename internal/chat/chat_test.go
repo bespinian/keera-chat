@@ -473,7 +473,13 @@ func TestRevokedAtGateway(t *testing.T) {
 func TestCallbackChecksState(t *testing.T) {
 	h := newHarness(t)
 	h.c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	res, err := h.c.Get(h.chat.URL + "/auth/callback?code=abc&state=forged")
+	// A sign-in this browser started, so it holds the login cookie.
+	res, err := h.c.Get(h.chat.URL + "/auth/login?provider=example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	res, err = h.c.Get(h.chat.URL + "/auth/callback?code=abc&state=forged")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -486,7 +492,7 @@ func TestCallbackChecksState(t *testing.T) {
 		SignInError string `json:"sign_in_error"`
 	}
 	h.do("GET", "/auth/config", nil, &cfg)
-	if !strings.Contains(cfg.SignInError, "started in another browser") {
+	if !strings.Contains(cfg.SignInError, "not the one this browser started") {
 		t.Fatalf("sign_in_error = %q, want why the sign-in failed", cfg.SignInError)
 	}
 	cfg.SignInError = ""

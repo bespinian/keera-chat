@@ -18,7 +18,7 @@ env_files = []
   # The page is embedded with go:embed, so editing it needs a Go rebuild too.
   include_ext = ["go", "js", "css", "html", "svg", "png", "woff2"]
 
-  exclude_dir = ["build", "testdata", ".git"]
+  exclude_dir = ["build", ".git"]
   exclude_regex = ["_test\\.go"]
 
   # SIGINT lets the binary release :8090. Killing it outright makes the next

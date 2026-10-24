@@ -298,8 +298,7 @@ func (s *Server) readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-			writeError(w, http.StatusRequestEntityTooLarge, "too_large",
-				"this chat is too large to send; start a new chat, or attach fewer or smaller images")
+			writeError(w, http.StatusRequestEntityTooLarge, "too_large", gateway.TooLarge)
 			return false
 		}
 		writeError(w, http.StatusBadRequest, "bad_request", "the request could not be read: "+err.Error())

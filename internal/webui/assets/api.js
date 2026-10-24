@@ -1,5 +1,6 @@
-// The chat API. Every answer that is not OK carries the gateway's error
-// envelope, {"error": {"code", "message"}}, whoever refused.
+// The chat API. An answer that is not OK carries the gateway's error envelope,
+// {"error": {"code", "message"}}, whether chat or the gateway refused. Only
+// something in between, such as a proxy, answers without it.
 
 import { sentence } from "./ui.js";
 

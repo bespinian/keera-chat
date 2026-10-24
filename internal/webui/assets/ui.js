@@ -8,9 +8,7 @@ export function h(tag, props, ...children) {
     if (v === null || v === undefined || v === false) continue;
     if (k === "class") el.className = v;
     else if (k === "style" && typeof v === "object") Object.assign(el.style, v);
-    else if (k.startsWith("on"))
-      el.addEventListener(k.slice(2).toLowerCase(), v);
-    else if (k === "dataset") Object.assign(el.dataset, v);
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2).toLowerCase(), v);
     else if (v === true) el.setAttribute(k, "");
     else el.setAttribute(k, v);
   }
@@ -111,8 +109,7 @@ export const icons = {
   copy: "M20 9h-9a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2zM5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1",
   check: "M20 6L9 17l-5-5",
   pencil: "M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z",
-  trash:
-    "M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6",
+  trash: "M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6",
   retry: "M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5",
   more: "M5 12h.01M12 12h.01M19 12h.01",
   menu: "M3 6h18M3 12h18M3 18h18",
@@ -122,8 +119,7 @@ export const icons = {
   arrowDown: "M12 5v14M19 12l-7 7-7-7",
   signout: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
   theme: "M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z",
-  sliders:
-    "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6",
+  sliders: "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6",
   download: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3",
   upload: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12",
   external: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3",
@@ -133,8 +129,7 @@ export const icons = {
     "M2.6 17.4A2 2 0 0 0 2 18.8V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.2a2 2 0 0 0 1.4-.6l.8-.8a6.5 6.5 0 1 0-4-4zM16.5 7.5h.01",
   key: "M21 2l-2 2m-7.6 7.6a5 5 0 1 1-7.1 7.1 5 5 0 0 1 7.1-7.1zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3",
   router: "M4 6h5l4 6h7M20 12l-3-3m3 3l-3 3M9 6l4 12h7",
-  thought:
-    "M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z",
+  thought: "M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z",
   sparkle:
     "M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z",
 };
@@ -318,7 +313,7 @@ let openMenu = null;
 export function menu(anchor, items, { up = false, wide = false } = {}) {
   if (openMenu && anchor.getAttribute("aria-expanded") === "true") {
     closeMenu();
-    return null;
+    return;
   }
   closeMenu();
   const list = h("div", {
@@ -398,7 +393,6 @@ export function menu(anchor, items, { up = false, wide = false } = {}) {
     window.removeEventListener("resize", onResize);
   };
   list.querySelector(".menu-item")?.focus({ preventScroll: true });
-  return list;
 }
 
 export function closeMenu() {

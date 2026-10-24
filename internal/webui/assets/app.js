@@ -336,14 +336,10 @@ function choose(alias, keyID) {
     return;
   }
   const model =
-    models.find((m) => m.alias === alias) ||
-    models.find((m) => m.alias === remembered("model")) ||
-    models[0];
+    models.find((m) => m.alias === alias) || models.find((m) => m.alias === remembered("model")) || models[0];
   const keys = keysFor(model.alias);
   const key =
-    keys.find((k) => k.id === keyID) ||
-    keys.find((k) => k.id === remembered("key:" + model.alias)) ||
-    keys[0];
+    keys.find((k) => k.id === keyID) || keys.find((k) => k.id === remembered("key:" + model.alias)) || keys[0];
   app.choice = { model, key };
   paintPicker();
 }
@@ -417,11 +413,7 @@ function paintList() {
   if (!shown.length) {
     replace(
       els.list,
-      h(
-        "div",
-        { class: "conv-empty" },
-        q ? "No chat has that in its title." : "Your chats will show here.",
-      ),
+      h("div", { class: "conv-empty" }, q ? "No chat has that in its title." : "Your chats will show here."),
     );
     return;
   }
@@ -568,12 +560,7 @@ function paintAccount() {
 function accountMenu(anchor) {
   const u = app.me.user;
   const items = [
-    h(
-      "div",
-      { class: "menu-who" },
-      h("strong", {}, u.name || u.email),
-      u.name ? h("span", {}, u.email) : null,
-    ),
+    h("div", { class: "menu-who" }, h("strong", {}, u.name || u.email), u.name ? h("span", {}, u.email) : null),
   ];
   const b = app.choice?.key.budget;
   if (b) items.push(budgetEl(b));
