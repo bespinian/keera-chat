@@ -367,6 +367,8 @@ func TestRefusedBeforeSending(t *testing.T) {
 			{Role: "user", Content: "hi"},
 		}},
 		"too many images": {"messages": []turn{{Role: "user", Images: slices.Repeat([]string{img}, maxImages+1)}}},
+		"too many files":  {"messages": []turn{{Role: "user", Files: slices.Repeat([]textFile{{Name: "a.txt", Text: "a"}}, maxFiles+1)}}},
+		"file too large":  {"messages": []turn{{Role: "user", Files: []textFile{{Name: "a.txt", Text: strings.Repeat("a", maxFileBytes+1)}}}}},
 		"unknown field":   {"messages": ask("hi"), "temperature": 2},
 	} {
 		if status, _ := h.send(in); status != 400 {
@@ -385,6 +387,25 @@ func TestImages(t *testing.T) {
 	h.send(map[string]any{"messages": []turn{{Role: "user", Content: "What is this?", Images: []string{img}}}})
 	parts := h.gw.LastChat()["messages"].([]any)[0].(map[string]any)["content"].([]any)
 	if len(parts) != 2 || parts[1].(map[string]any)["image_url"].(map[string]any)["url"] != img {
+		t.Fatalf("parts = %v", parts)
+	}
+}
+
+func TestFiles(t *testing.T) {
+	h := newHarness(t)
+	h.signIn()
+	notes := textFile{Name: "notes.md", Text: "# Notes\n"}
+	h.send(map[string]any{"messages": []turn{{Role: "user", Content: "Sum it up.", Files: []textFile{notes}}}})
+	want := "<file name=\"notes.md\">\n# Notes\n</file>\n\nSum it up."
+	if got := h.gw.LastChat()["messages"].([]any)[0].(map[string]any)["content"]; got != want {
+		t.Errorf("content = %q, want %q", got, want)
+	}
+
+	// A file alone is a message, and goes with the images as their text.
+	img := "data:image/png;base64,iVBORw0KGgo="
+	h.send(map[string]any{"messages": []turn{{Role: "user", Images: []string{img}, Files: []textFile{notes}}}})
+	parts := h.gw.LastChat()["messages"].([]any)[0].(map[string]any)["content"].([]any)
+	if len(parts) != 2 || parts[0].(map[string]any)["text"] != "<file name=\"notes.md\">\n# Notes\n</file>" {
 		t.Fatalf("parts = %v", parts)
 	}
 }

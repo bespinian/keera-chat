@@ -120,6 +120,21 @@ sbom: image
 		-o "$(SBOM_FORMAT)=$$dest/$(notdir $(SBOM_FILE))" && \
 	echo "wrote $(SBOM_FILE) for $(CHAT_IMAGE) ($$(echo "$$id" | cut -c1-12))"
 
+# pdf.js turns an attached PDF's pages into images in the browser. It is
+# vendored, like everything the page loads, since there is no build step.
+# Dependabot does not read this file, so bump PDFJS_VERSION by hand.
+PDFJS_VERSION ?= 6.4.299
+PDFJS_DIR ?= internal/webui/assets/vendor/pdfjs
+
+.PHONY: pdfjs
+pdfjs:
+	@tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT INT TERM; \
+	curl -fsSL https://registry.npmjs.org/pdfjs-dist/-/pdfjs-dist-$(PDFJS_VERSION).tgz | tar xz -C "$$tmp" && \
+	mkdir -p $(PDFJS_DIR) && \
+	cp "$$tmp/package/build/pdf.min.mjs" "$$tmp/package/build/pdf.worker.min.mjs" \
+		"$$tmp/package/LICENSE" $(PDFJS_DIR)/ && \
+	echo "vendored pdf.js $(PDFJS_VERSION) in $(PDFJS_DIR)"
+
 .PHONY: clean
 clean:
 	@rm -rf $(BUILD_DIR)

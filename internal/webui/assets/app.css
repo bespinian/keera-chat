@@ -770,6 +770,37 @@ textarea.input {
   max-height: 200px;
   border-radius: 12px;
 }
+.bubble-files {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.bubble-files:not(:last-child) {
+  margin-bottom: 8px;
+}
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 240px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 13px;
+}
+.file-chip svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+}
+.file-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .image-open {
   max-width: 100%;
   padding: 0;
@@ -1259,6 +1290,11 @@ h6.md-h {
   width: 60px;
   height: 60px;
 }
+.thumb-file {
+  width: auto;
+  height: auto;
+  align-self: center;
+}
 .thumb .image-open {
   width: 100%;
   height: 100%;
@@ -1271,6 +1307,47 @@ h6.md-h {
   object-fit: cover;
   border: 1px solid var(--border);
   border-radius: var(--radius);
+}
+.pdf-stack {
+  position: relative;
+  display: inline-block;
+}
+/* The pages after the first show as sheets behind it, so a PDF reads as one
+   attachment. */
+.pdf-stack.is-stack,
+.thumb:has(.pdf-stack.is-stack) {
+  margin: 0 8px 8px 0;
+}
+.pdf-stack img {
+  border: 1px solid var(--border-strong);
+  /* A page's top says more than its middle, which is often blank. */
+  object-position: top;
+}
+.pdf-stack.is-stack img {
+  box-shadow:
+    4px 4px 0 -1px var(--surface-3),
+    4px 4px 0 0 var(--faint),
+    8px 8px 0 -1px var(--surface-3),
+    8px 8px 0 0 var(--faint);
+}
+/* In the tray, the thumb is the stack's box. */
+.thumb .pdf-stack {
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+.pdf-count {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgb(10 10 12 / 70%);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 600;
+  pointer-events: none;
 }
 .thumb-remove {
   position: absolute;
@@ -1511,6 +1588,44 @@ h6.md-h {
 .viewer-close:hover {
   background: rgb(10 10 12 / 80%);
   color: #ffffff;
+}
+/* Room for the count below the image. */
+.viewer:has(.viewer-count) img {
+  max-height: calc(100dvh - 120px);
+}
+.viewer-nav {
+  position: absolute;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translateY(-50%);
+  background: rgb(10 10 12 / 55%);
+  color: #ececef;
+}
+.viewer-nav:hover:not(:disabled) {
+  background: rgb(10 10 12 / 80%);
+  color: #ffffff;
+}
+.viewer-nav:disabled {
+  opacity: 0.3;
+}
+.viewer-prev {
+  left: 12px;
+}
+.viewer-next {
+  right: 12px;
+}
+.viewer-count {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgb(10 10 12 / 70%);
+  color: #ececef;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------------------------------------------------------------- toasts */

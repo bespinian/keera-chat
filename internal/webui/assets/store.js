@@ -235,10 +235,12 @@ function parseExport(file) {
 }
 
 const idPattern = /^c[0-9a-f]{24}$/;
-// The image types and count chat.js attaches and internal/chat/turns.go
-// accepts, so an imported chat can be sent on.
+// The image types and count, and the files, chat.js attaches and
+// internal/chat/turns.go accepts, so an imported chat can be sent on.
 const imagePattern = /^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+=*$/;
 const maxImages = 10;
+const maxFiles = 10;
+const maxFileBytes = 512 << 10;
 
 function conversation(c) {
   if (!c || typeof c !== "object") throw new Error("it is not a chat.");
@@ -269,6 +271,33 @@ function message(m) {
       throw new Error(`a message has more than ${maxImages} images.`);
     }
     kept.images = m.images;
+  }
+  if (m.pdfs != null) {
+    // Each PDF is a run of the message's images, and runs do not overlap.
+    let end = 0;
+    const ok = (p) => {
+      const fits = p && typeof p.name === "string" && Number.isSafeInteger(p.at) && Number.isSafeInteger(p.pages);
+      if (!fits || p.at < end || p.pages < 1 || p.at + p.pages > (kept.images?.length || 0)) return false;
+      end = p.at + p.pages;
+      return true;
+    };
+    if (!Array.isArray(m.pdfs) || !m.pdfs.every(ok)) {
+      throw new Error("a message has a PDF whose pages are not among its images.");
+    }
+    kept.pdfs = m.pdfs.map(({ name, at, pages }) => ({ name, at, pages }));
+  }
+  if (m.files != null) {
+    const ok = (f) => f && typeof f.name === "string" && typeof f.text === "string";
+    if (!Array.isArray(m.files) || !m.files.every(ok)) {
+      throw new Error("a message has a file that cannot be read.");
+    }
+    if (m.files.length > maxFiles) {
+      throw new Error(`a message has more than ${maxFiles} files.`);
+    }
+    if (m.files.some((f) => new TextEncoder().encode(f.text).length > maxFileBytes)) {
+      throw new Error(`a message has a file larger than ${maxFileBytes >> 10} KB.`);
+    }
+    kept.files = m.files.map(({ name, text }) => ({ name, text }));
   }
   for (const k of ["model", "reasoning", "error", "error_detail", "finish"]) {
     if (m[k]) kept[k] = text(m[k]);

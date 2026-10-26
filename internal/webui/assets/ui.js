@@ -106,6 +106,7 @@ export const icons = {
   stop: "M7 7h10v10H7z",
   plus: "M12 5v14M5 12h14",
   close: "M18 6L6 18M6 6l12 12",
+  file: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6",
   copy: "M20 9h-9a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2zM5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1",
   check: "M20 6L9 17l-5-5",
   pencil: "M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z",
@@ -116,6 +117,8 @@ export const icons = {
   sidebar: "M3 4h18v16H3zM9 4v16",
   search: "M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3",
   chevronDown: "M6 9l6 6 6-6",
+  chevronLeft: "M15 18l-6-6 6-6",
+  chevronRight: "M9 18l6-6-6-6",
   arrowDown: "M12 5v14M19 12l-7 7-7-7",
   signout: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
   theme: "M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z",
@@ -266,9 +269,26 @@ export function confirmDialog(title, text, submit) {
   return modal({ title, body: h("p", { class: "modal-text" }, text), submit, danger: true });
 }
 
-/** viewImage shows an image as large as the window allows. A click anywhere
- *  or Escape closes it. */
-function viewImage(src, alt = "") {
+/** viewImage shows images as large as the window allows, from the one at
+ *  index. Arrows and the arrow keys flip through several, such as the pages
+ *  of a PDF. A click anywhere else or Escape closes it. */
+function viewImage(srcs, index, alt = "") {
+  const img = h("img", { alt });
+  const count = h("div", { class: "viewer-count", "aria-live": "polite" });
+  const step = (by) => (e) => {
+    e?.stopPropagation();
+    show(index + by);
+  };
+  const prev = iconButton(icons.chevronLeft, "Previous", step(-1), { class: "viewer-nav viewer-prev" });
+  const next = iconButton(icons.chevronRight, "Next", step(1), { class: "viewer-nav viewer-next" });
+  function show(i) {
+    index = Math.min(Math.max(i, 0), srcs.length - 1);
+    img.src = srcs[index];
+    count.textContent = `${index + 1} / ${srcs.length}`;
+    prev.disabled = index === 0;
+    next.disabled = index === srcs.length - 1;
+  }
+  const many = srcs.length > 1;
   const closeBtn = iconButton(icons.close, "Close", () => close(), { class: "viewer-close" });
   const overlay = h(
     "div",
@@ -278,16 +298,23 @@ function viewImage(src, alt = "") {
       "aria-modal": "true",
       "aria-label": alt || "Image",
       onClick: () => close(),
+      onKeydown: (e) => {
+        if (many && e.key === "ArrowLeft") step(-1)(e);
+        if (many && e.key === "ArrowRight") step(1)(e);
+      },
     },
-    h("img", { src, alt }),
+    img,
+    many ? [prev, next, count] : null,
     closeBtn,
   );
+  show(index);
   const close = showOverlay(overlay);
   closeBtn.focus();
 }
 
-/** imageButton is a preview that opens the image in full when clicked. */
-export function imageButton(src, alt = "") {
+/** imageButton is a preview that opens the image in full when clicked. The
+ *  viewer flips through gallery, the image's place in it being at. */
+export function imageButton(src, alt = "", { gallery = [src], at = 0 } = {}) {
   return h(
     "button",
     {
@@ -295,7 +322,7 @@ export function imageButton(src, alt = "") {
       type: "button",
       title: "Enlarge",
       "aria-label": alt ? `Enlarge ${alt}` : "Enlarge image",
-      onClick: () => viewImage(src, alt),
+      onClick: () => viewImage(gallery, at, alt),
     },
     h("img", { src, alt }),
   );

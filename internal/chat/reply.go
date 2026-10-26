@@ -97,7 +97,7 @@ func check(in replyIn) string {
 	if len(in.Messages) == 0 || in.Messages[len(in.Messages)-1].Role != "user" {
 		return "there is no message to answer"
 	}
-	if last := in.Messages[len(in.Messages)-1]; strings.TrimSpace(last.Content) == "" && len(last.Images) == 0 {
+	if last := in.Messages[len(in.Messages)-1]; strings.TrimSpace(last.Content) == "" && len(last.Images) == 0 && len(last.Files) == 0 {
 		return "write a message first"
 	}
 	for _, m := range in.Messages {
@@ -110,6 +110,14 @@ func check(in replyIn) string {
 		for _, img := range m.Images {
 			if !validImage(img) {
 				return "images must be PNG, JPEG, GIF or WebP"
+			}
+		}
+		if len(m.Files) > maxFiles {
+			return fmt.Sprintf("attach at most %d files to one message", maxFiles)
+		}
+		for _, f := range m.Files {
+			if len(f.Text) > maxFileBytes {
+				return fmt.Sprintf("%s is larger than %d KB", f.Name, maxFileBytes>>10)
 			}
 		}
 	}

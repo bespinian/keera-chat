@@ -17,6 +17,9 @@ const imageTypes = "image/png,image/jpeg,image/gif,image/webp";
 // sent again with each later message.
 const maxImageSide = 2048;
 const maxImages = 10;
+// Text files go to the model as text. The server checks the same limits.
+const maxFiles = 10;
+const maxFileBytes = 512 << 10;
 
 const cutOff = "The reply was cut off before it finished. Try again.";
 
@@ -79,7 +82,7 @@ export function chatView(app, id) {
       if (e.key === "Escape") live()?.abort.abort();
     },
     onPaste: (e) => {
-      const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
+      const files = [...(e.clipboardData?.files || [])];
       if (files.length) {
         e.preventDefault();
         attach(files);
@@ -88,8 +91,9 @@ export function chatView(app, id) {
   });
 
   const picker = h("input", {
+    // No accept list: a text file can have any name, so attach checks what
+    // each file holds instead.
     type: "file",
-    accept: imageTypes,
     multiple: true,
     hidden: true,
     onChange: () => {
@@ -100,7 +104,7 @@ export function chatView(app, id) {
     },
   });
   const tray = h("div", { class: "composer-tray", hidden: true });
-  const attachBtn = iconButton(icons.plus, "Attach images", () => picker.click(), { class: "composer-attach" });
+  const attachBtn = iconButton(icons.plus, "Attach files", () => picker.click(), { class: "composer-attach" });
   const sendBtn = h(
     "button",
     {
@@ -334,8 +338,11 @@ export function chatView(app, id) {
       attached.map((a) =>
         h(
           "div",
-          { class: "thumb" },
-          imageButton(a.url, a.name),
+          {
+            class: a.url ? "thumb" : "thumb thumb-file",
+            title: a.pages ? null : a.name,
+          },
+          a.pages ? pdfThumb(a.name, a.pages) : a.url ? imageButton(a.url, a.name) : fileChip(a.name),
           h(
             "button",
             {
@@ -372,11 +379,12 @@ export function chatView(app, id) {
       h(
         "div",
         { class: "bubble" },
-        m.images?.length
+        m.images?.length ? bubbleImages(m) : null,
+        m.files?.length
           ? h(
               "div",
-              { class: "bubble-images" },
-              m.images.map((url) => imageButton(url)),
+              { class: "bubble-files" },
+              m.files.map((f) => fileChip(f.name)),
             )
           : null,
         m.content ? h("div", { class: "bubble-text" }, m.content) : null,
@@ -409,9 +417,9 @@ export function chatView(app, id) {
     };
     const save = () => {
       const text = box.value.trim();
-      if (!text && !m.images?.length) return;
+      if (!text && !m.images?.length && !m.files?.length) return;
       editing = -1;
-      send({ content: text, images: m.images || [], edit: i });
+      send({ content: text, images: m.images || [], pdfs: m.pdfs || [], files: m.files || [], edit: i });
     };
     box.addEventListener("keydown", (e) => {
       if (sends(e)) {
@@ -534,23 +542,60 @@ export function chatView(app, id) {
     );
   }
 
-  /* ------------------------------------------------------------ images */
+  /* ------------------------------------------------------- attachments */
 
+  // attached holds images as { name, url }, a PDF as { name, url, pages }
+  // with its first page as url, and text files as { name, text }. A sent
+  // message keeps a PDF as its pages among the images, and as { name, at,
+  // pages } in pdfs, where at is its first page's place.
   async function attach(files) {
     if (!app.choice) return;
     for (const file of files) {
-      if (attached.length >= maxImages) {
-        toast(`A message can carry at most ${maxImages} images.`, "bad");
-        break;
-      }
-      if (!imageTypes.split(",").includes(file.type)) {
-        toast(`${file.name} is not a PNG, JPEG, GIF or WebP image.`, "bad");
-        continue;
-      }
-      try {
-        attached.push({ name: file.name, url: await readImage(file) });
-      } catch {
-        toast(`${file.name} could not be read as an image.`, "bad");
+      const room = maxImages - attached.flatMap(imagesOf).length;
+      if (imageTypes.split(",").includes(file.type)) {
+        if (!room) {
+          toast(`A message can carry at most ${maxImages} images.`, "bad");
+          continue;
+        }
+        try {
+          attached.push({ name: file.name, url: await readImage(file) });
+        } catch {
+          toast(`${file.name} could not be read as an image.`, "bad");
+        }
+      } else if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
+        if (!room) {
+          toast(`A message can carry at most ${maxImages} images, and each page of a PDF is one.`, "bad");
+          continue;
+        }
+        try {
+          const { pages, total } = await readPDF(file, room);
+          attached.push({ name: file.name, url: pages[0], pages });
+          if (total > pages.length) {
+            const first = pages.length === 1 ? "first page" : `first ${pages.length} pages`;
+            toast(`Only the ${first} of ${file.name} fit in this message.`, "bad");
+          }
+        } catch (err) {
+          toast(
+            err?.name === "PasswordException"
+              ? `${file.name} is protected by a password. Remove it and attach the PDF again.`
+              : `${file.name} could not be read as a PDF.`,
+            "bad",
+          );
+        }
+      } else {
+        if (attached.filter((a) => !a.url).length >= maxFiles) {
+          toast(`A message can carry at most ${maxFiles} files.`, "bad");
+          continue;
+        }
+        if (file.size > maxFileBytes) {
+          toast(`${file.name} is larger than ${maxFileBytes >> 10} KB.`, "bad");
+          continue;
+        }
+        try {
+          attached.push({ name: file.name, text: await readText(file) });
+        } catch {
+          toast(`${file.name} is not an image, a PDF or a text file.`, "bad");
+        }
       }
     }
     paintTray();
@@ -563,15 +608,31 @@ export function chatView(app, id) {
   function submit() {
     const text = input.value.trim();
     if ((!text && !attached.length) || live() || !app.choice) return;
-    const images = attached.map((a) => a.url);
+    const images = [];
+    const pdfs = [];
+    for (const a of attached) {
+      if (a.pages) pdfs.push({ name: a.name, at: images.length, pages: a.pages.length });
+      images.push(...imagesOf(a));
+    }
+    const files = attached.filter((a) => !a.url).map(({ name, text }) => ({ name, text }));
+    // A chat that starts with a document alone is named after it.
+    const about = attached.find((a) => !a.url || a.pages)?.name;
     input.value = "";
     autosize(input);
     attached = [];
     paintTray();
-    send({ content: text, images });
+    send({ content: text, images, pdfs, files, about });
   }
 
-  async function send({ content = "", images = [], edit = null, regenerate = false }) {
+  async function send({
+    content = "",
+    images = [],
+    pdfs = [],
+    files = [],
+    about = "",
+    edit = null,
+    regenerate = false,
+  }) {
     const choice = app.choice;
     if (!choice || live()) return;
     const target = conv;
@@ -588,6 +649,8 @@ export function chatView(app, id) {
         role: "user",
         content,
         images,
+        pdfs,
+        files,
         created_at: new Date().toISOString(),
       };
       if (edit !== null) target.messages = target.messages.slice(0, edit);
@@ -651,7 +714,7 @@ export function chatView(app, id) {
             state.abort.signal,
           );
           started = true;
-          await begin(target, state, { content, images, choice });
+          await begin(target, state, { content, images, about, choice });
 
           for await (const { event, data } of stream) {
             if (event === "delta") {
@@ -685,7 +748,7 @@ export function chatView(app, id) {
         target.messages = before;
         if (ask && edit === null && app.view === view && !input.value) {
           input.value = content;
-          attached = images.map((url, n) => ({ name: `image ${n + 1}`, url }));
+          attached = [...attachments(images, pdfs), ...files];
           paintTray();
           queueMicrotask(() => autosize(input));
         }
@@ -726,11 +789,11 @@ export function chatView(app, id) {
   /** begin keeps a conversation once the server took its new message, so
    *  the message is not lost whatever happens to the reply. A new
    *  conversation gets its id and its place in the sidebar here. */
-  async function begin(target, state, { content, images, choice }) {
+  async function begin(target, state, { content, images, about, choice }) {
     const now = new Date().toISOString();
     if (!target.id) {
       target.id = newID();
-      target.title = titleFrom(content, images.length);
+      target.title = titleFrom(content, images.length, about);
       target.created_at = now;
       app.live.set(target.id, state);
       if (view.pending === state) view.pending = null;
@@ -837,14 +900,15 @@ function copyButton(m) {
 function turn(m) {
   const t = { role: m.role, content: m.content || "" };
   if (m.images?.length) t.images = m.images;
+  if (m.files?.length) t.files = m.files;
   if (m.error) t.failed = true;
   return t;
 }
 
 /** titleFrom names a new conversation after its first message. Asking the
  *  model for a title would spend the person's budget on every new chat. */
-function titleFrom(text, images) {
-  const t = oneLine(text, 60);
+function titleFrom(text, images, about) {
+  const t = oneLine(text, 60) || oneLine(about || "", 60);
   if (t) return t;
   if (images === 1) return "Image";
   if (images > 1) return "Images";
@@ -943,6 +1007,88 @@ async function readImage(file) {
   canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close();
   return canvas.toDataURL(file.type, 0.9);
+}
+
+/** readPDF draws a PDF's first pages as images, as many as there is room
+ *  for. Models here read images but not PDFs, and an image of a page also
+ *  keeps its tables, figures and scans. pdf.js is loaded only now, since it
+ *  is large. */
+async function readPDF(file, room) {
+  const pdfjs = await import("./vendor/pdfjs/pdf.min.mjs");
+  pdfjs.GlobalWorkerOptions.workerSrc = "/assets/vendor/pdfjs/pdf.worker.min.mjs";
+  const task = pdfjs.getDocument({ data: await file.arrayBuffer() });
+  try {
+    const doc = await task.promise;
+    const pages = [];
+    for (let n = 1; n <= Math.min(doc.numPages, room); n++) {
+      const page = await doc.getPage(n);
+      const size = page.getViewport({ scale: 1 });
+      const viewport = page.getViewport({ scale: maxImageSide / Math.max(size.width, size.height) });
+      const canvas = h("canvas", { width: Math.floor(viewport.width), height: Math.floor(viewport.height) });
+      await page.render({ canvas, viewport }).promise;
+      // JPEG, since a page as PNG is several times larger, and every image is
+      // sent again with each later message.
+      pages.push(canvas.toDataURL("image/jpeg", 0.85));
+      page.cleanup();
+    }
+    return { pages, total: doc.numPages };
+  } finally {
+    task.destroy();
+  }
+}
+
+/** attachments groups a message's images as they were attached: a PDF's
+ *  pages as { name, url, pages }, and other images as { name, url }. */
+function attachments(images = [], pdfs = []) {
+  const out = [];
+  for (let n = 0; n < images.length; ) {
+    const pdf = pdfs.find((p) => p.at === n && p.pages > 0);
+    const pages = pdf ? images.slice(n, n + pdf.pages) : null;
+    out.push(pdf ? { name: pdf.name, url: pages[0], pages } : { name: `image ${n + 1}`, url: images[n] });
+    n += pages ? pages.length : 1;
+  }
+  return out;
+}
+
+/** bubbleImages shows a sent message's images, each PDF as one stack. The
+ *  other images open in one viewer together. */
+function bubbleImages(m) {
+  const parts = attachments(m.images, m.pdfs);
+  const plain = parts.filter((a) => !a.pages).map((a) => a.url);
+  let n = 0;
+  return h(
+    "div",
+    { class: "bubble-images" },
+    parts.map((a) => (a.pages ? pdfThumb(a.name, a.pages) : imageButton(a.url, "", { gallery: plain, at: n++ }))),
+  );
+}
+
+/** pdfThumb shows a PDF as its first page, with the others as a stack
+ *  behind it and their count. Opening it flips through them. */
+function pdfThumb(name, pages) {
+  const many = pages.length > 1;
+  return h(
+    "span",
+    { class: "pdf-stack" + (many ? " is-stack" : ""), title: `${name}, ${many ? `${pages.length} pages` : "1 page"}` },
+    imageButton(pages[0], name, { gallery: pages }),
+    many ? h("span", { class: "pdf-count", "aria-hidden": "true" }, `${pages.length} pages`) : null,
+  );
+}
+
+/** imagesOf is what an attachment sends as images: a PDF its pages. */
+function imagesOf(a) {
+  return a.pages || (a.url ? [a.url] : []);
+}
+
+/** readText reads a file that holds UTF-8 text, and refuses any other. */
+async function readText(file) {
+  const text = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
+  if (text.includes("\0")) throw new Error("binary");
+  return text;
+}
+
+function fileChip(name) {
+  return h("span", { class: "file-chip" }, icon(icons.file), h("span", { class: "file-chip-name" }, name));
 }
 
 function autosize(el) {

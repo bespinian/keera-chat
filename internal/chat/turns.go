@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"fmt"
 	"strings"
 	"time"
 	"unicode"
@@ -11,9 +12,17 @@ type turn struct {
 	Role    string   `json:"role"` // "user" or "assistant"
 	Content string   `json:"content"`
 	Images  []string `json:"images,omitempty"`
+	// Files are text files the person attached. A PDF arrives as images of
+	// its pages, since no model server here reads PDFs.
+	Files []textFile `json:"files,omitempty"`
 	// Failed marks a reply that did not come, such as one the gateway
 	// refused. It is left out of what is sent next.
 	Failed bool `json:"failed,omitempty"`
+}
+
+type textFile struct {
+	Name string `json:"name"`
+	Text string `json:"text"`
 }
 
 // Message is a reply, as the page keeps it with the conversation.
@@ -74,7 +83,7 @@ func wire(instructions string, msgs []turn) []wireMessage {
 			if i < len(msgs)-1 && !answered(msgs[i+1]) {
 				continue
 			}
-			out = append(out, wireMessage{Role: "user", Content: content(m.Content, m.Images)})
+			out = append(out, wireMessage{Role: "user", Content: content(m)})
 		case "assistant":
 			if answered(m) {
 				out = append(out, wireMessage{Role: "assistant", Content: m.Content})
@@ -90,19 +99,33 @@ func answered(m turn) bool {
 }
 
 // content uses the parts form only for a turn with images, which only models
-// that read images accept.
-func content(text string, images []string) any {
-	if len(images) == 0 {
+// that read images accept. Files go ahead of the message as text, so models
+// that read only text read them too.
+func content(m turn) any {
+	text := withFiles(m.Content, m.Files)
+	if len(m.Images) == 0 {
 		return text
 	}
-	parts := make([]wirePart, 0, len(images)+1)
+	parts := make([]wirePart, 0, len(m.Images)+1)
 	if text != "" {
 		parts = append(parts, wirePart{Type: "text", Text: text})
 	}
-	for _, url := range images {
+	for _, url := range m.Images {
 		parts = append(parts, wirePart{Type: "image_url", ImageURL: &imageURL{URL: url}})
 	}
 	return parts
+}
+
+func withFiles(text string, files []textFile) string {
+	if len(files) == 0 {
+		return text
+	}
+	var b strings.Builder
+	for _, f := range files {
+		fmt.Fprintf(&b, "<file name=%q>\n%s\n</file>\n\n", f.Name, strings.TrimRight(f.Text, "\n"))
+	}
+	b.WriteString(text)
+	return strings.TrimRight(b.String(), "\n")
 }
 
 // splitThink takes the thinking out of a reply that writes it inline as
@@ -136,6 +159,13 @@ var imagePrefixes = []string{
 }
 
 const maxImages = 10
+
+// maxFiles and maxFileBytes bound the text files of one message. chat.js and
+// store.js have the same. A file this size is already about 130k tokens.
+const (
+	maxFiles     = 10
+	maxFileBytes = 512 << 10
+)
 
 func validImage(url string) bool {
 	for _, p := range imagePrefixes {

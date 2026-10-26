@@ -37,8 +37,11 @@ any other request, and the person needs nothing but a browser.
   pays, and someone with none is told whom to ask.
 - **Feels like the chats people know.** Replies stream in with Markdown, tables
   and code. People can stop a reply, answer it again, edit a message, attach
-  images, set custom instructions, and find old chats in the sidebar. It works on
-  a phone and follows the system's light or dark theme.
+  images, PDFs and text files, set custom instructions, and find old chats in
+  the sidebar. It works on a phone and follows the system's light or dark theme.
+- **Turns PDFs into images.** The model servers behind the gateway read text
+  and images, not PDFs. So the browser draws each page of a PDF as an image,
+  up to ten a message, and only a model that reads images can answer about it.
 - **Keeps chats in the browser.** Conversations stay on the person's device,
   in the browser they chat in. Keera Chat itself keeps nothing, so it needs
   no volume and no backup. People can export their chats to a file and import
