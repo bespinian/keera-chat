@@ -1,5 +1,4 @@
-/* Keera Chat's one stylesheet, with no build step. Its tokens are Keera
-   Gateway's panel's, so the two read as one product. */
+/* Keera Chat's stylesheet. Tokens match Keera Gateway's panel. */
 
 @font-face {
   font-family: "Space Grotesk";
@@ -38,7 +37,7 @@
   --column: 768px;
 }
 
-/* The theme chosen in the menu, which light-dark() follows. */
+/* The theme picked in the menu. */
 :root[data-theme="light"] {
   color-scheme: light;
 }
@@ -46,9 +45,8 @@
   color-scheme: dark;
 }
 
-/* The shadow is not one colour, so it cannot use light-dark(). One rule cannot
-   match both a media query and a selector, and the CSP allows no inline script
-   to set the theme before the first paint, so dark is named twice. */
+/* The shadow cannot use light-dark(), so dark is set twice: for the media
+   query and for the menu's choice. The CSP blocks an inline theme script. */
 :root {
   --shadow: 0 1px 2px rgb(23 23 26 / 6%), 0 8px 24px -12px rgb(23 23 26 / 18%);
 }
@@ -65,8 +63,7 @@
   box-sizing: border-box;
 }
 
-/* Components set their own display, which outranks the browser's rule for
-   [hidden]. */
+/* Component display rules would otherwise override [hidden]. */
 [hidden] {
   display: none !important;
 }
@@ -118,13 +115,14 @@ code {
   flex: 1;
 }
 
-/* A name or hint that is cut short with an ellipsis rather than wrapped. */
+/* Cut with an ellipsis rather than wrapped. */
 .conv-title,
 .account-name,
 .account-org,
 .model-picker-name,
 .menu-hint,
-.menu-who span {
+.menu-who span,
+.file-chip-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -136,13 +134,14 @@ code {
 .model-picker svg,
 .to-bottom svg,
 .menu-item > svg,
-.menu-check svg {
+.menu-check svg,
+.file-chip svg {
   flex: none;
   width: 16px;
   height: 16px;
 }
 
-/* The small capitals over a group of chats or of menu items. */
+/* Small caps heading over a group of chats or menu items. */
 .conv-group-label,
 .menu-heading {
   font-size: 11px;
@@ -178,9 +177,8 @@ code {
 
 /* ----------------------------------------------------------------- shell */
 
-/* Exactly the viewport's height, so the thread scrolls by itself and the
-   composer stays in reach. dvh follows a phone's collapsing address bar, and
-   --screen-height the keyboard (see app.js). */
+/* Viewport height, so only the thread scrolls. dvh follows a phone's address
+   bar, --screen-height the keyboard (see app.js). */
 .shell {
   display: grid;
   grid-template-columns: 264px minmax(0, 1fr);
@@ -358,13 +356,11 @@ code {
   background: var(--accent);
   animation: blink 1.1s ease-in-out infinite;
 }
-/* The menu button appears on hover, so a long title is not cut short for a
-   button nobody is reaching for. */
+/* The menu button shows on hover, so long titles get the room. */
 .conv-more {
   position: absolute;
   right: 3px;
   opacity: 0;
-  background: var(--surface-3);
 }
 .conv-item.is-current .conv-more {
   background: var(--accent-soft);
@@ -461,7 +457,7 @@ code {
   flex-direction: column;
 }
 
-/* What only shows in one layout. The narrow layout is at the end. */
+/* Shown in one layout only. Narrow layout is at the end. */
 .show-narrow,
 .when-collapsed,
 .when-collapsed-or-narrow {
@@ -542,7 +538,8 @@ code {
   color: #fff;
 }
 .btn-primary:hover:not(:disabled),
-.btn-danger-solid:hover:not(:disabled) {
+.btn-danger-solid:hover:not(:disabled),
+.composer-send:hover:not(:disabled) {
   filter: brightness(1.08);
 }
 .btn-sm {
@@ -590,15 +587,13 @@ code {
   font-size: 14px;
   width: 100%;
   min-width: 0;
+  resize: vertical;
+  line-height: 1.5;
 }
 .input:focus {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
   border-color: var(--accent);
-}
-textarea.input {
-  resize: vertical;
-  line-height: 1.5;
 }
 
 .banner {
@@ -662,8 +657,7 @@ textarea.input {
   text-align: center;
 }
 
-/* A new chat: the greeting and the composer meet in the middle of the
-   screen, and the composer moves down once there is a conversation. */
+/* New chat: greeting and composer sit centered until the first message. */
 .hero {
   display: none;
 }
@@ -681,8 +675,7 @@ textarea.input {
   flex: 1;
   align-items: flex-start;
 }
-/* Without access there is no composer to meet, so the greeting and the
-   notice sit in the middle on their own. */
+/* Without access there is no composer, so greeting and notice center alone. */
 .chat.is-empty.no-access .hero {
   align-items: center;
   padding-bottom: 0;
@@ -693,8 +686,7 @@ textarea.input {
   gap: 10px;
   text-align: center;
 }
-/* Keera's portrait has a transparent background, so the circle behind her
-   keeps the crop round in either theme. */
+/* The portrait is transparent, so this circle keeps it round in both themes. */
 .hero-mark {
   display: block;
   margin-bottom: 4px;
@@ -754,30 +746,25 @@ textarea.input {
 .bubble-text {
   white-space: pre-wrap;
 }
-.bubble-images {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  align-items: flex-start;
-  gap: 6px;
-}
-.bubble-images:not(:last-child) {
-  margin-bottom: 8px;
-}
-.bubble-images img {
-  display: block;
-  max-width: min(260px, 100%);
-  max-height: 200px;
-  border-radius: 12px;
-}
+.bubble-images,
 .bubble-files {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 6px;
 }
+.bubble-images:not(:last-child),
 .bubble-files:not(:last-child) {
   margin-bottom: 8px;
+}
+.bubble-images {
+  align-items: flex-start;
+}
+.bubble-images img {
+  display: block;
+  max-width: min(260px, 100%);
+  max-height: 200px;
+  border-radius: 12px;
 }
 .file-chip {
   display: inline-flex;
@@ -791,15 +778,7 @@ textarea.input {
   font-size: 13px;
 }
 .file-chip svg {
-  flex: none;
-  width: 16px;
-  height: 16px;
   color: var(--muted);
-}
-.file-chip-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .image-open {
   max-width: 100%;
@@ -907,9 +886,13 @@ textarea.input {
   overflow-y: auto;
 }
 .shimmer {
-  background: linear-gradient(90deg, var(--muted) 30%, var(--text) 50%, var(--muted) 70%);
+  background: linear-gradient(
+    90deg,
+    var(--muted) 30%,
+    var(--text) 50%,
+    var(--muted) 70%
+  );
   background-size: 200% 100%;
-  -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   animation: shimmer 1.6s linear infinite;
@@ -955,7 +938,7 @@ textarea.input {
   user-select: text;
 }
 
-/* Editing one of the person's messages. */
+/* Editing a sent message. */
 .msg-editing {
   align-items: stretch;
 }
@@ -965,8 +948,7 @@ textarea.input {
   border-radius: 16px;
   background: var(--surface);
 }
-/* These fields are drawn by the box around them, or by a border of their own,
-   which shows the focus instead of an outline. */
+/* These fields show focus with their box or border, not an outline. */
 .edit-input,
 .composer-input {
   width: 100%;
@@ -1020,7 +1002,6 @@ h2.md-h {
 h3.md-h {
   font-size: 1.15em;
 }
-h4.md-h,
 h5.md-h,
 h6.md-h {
   font-size: 1em;
@@ -1145,7 +1126,7 @@ h6.md-h {
   line-height: 1.6;
 }
 
-/* The cursor at the end of a reply that is still arriving. */
+/* Cursor at the end of a streaming reply. */
 .md.is-streaming > :last-child::after {
   content: "";
   display: inline-block;
@@ -1223,9 +1204,6 @@ h6.md-h {
   transition:
     opacity 0.12s,
     filter 0.12s;
-}
-.composer-send:hover:not(:disabled) {
-  filter: brightness(1.08);
 }
 .composer-send:disabled {
   opacity: 0.35;
@@ -1312,15 +1290,14 @@ h6.md-h {
   position: relative;
   display: inline-block;
 }
-/* The pages after the first show as sheets behind it, so a PDF reads as one
-   attachment. */
+/* Later pages show as sheets behind the first, so a PDF reads as one item. */
 .pdf-stack.is-stack,
 .thumb:has(.pdf-stack.is-stack) {
   margin: 0 8px 8px 0;
 }
 .pdf-stack img {
   border: 1px solid var(--border-strong);
-  /* A page's top says more than its middle, which is often blank. */
+  /* Show the top: the middle is often blank. */
   object-position: top;
 }
 .pdf-stack.is-stack img {
@@ -1398,7 +1375,7 @@ h6.md-h {
   z-index: 150;
   min-width: 220px;
   max-width: min(340px, calc(100vw - 16px));
-  max-height: calc(100vh - 16px);
+  max-height: calc(100dvh - 16px);
   overflow-y: auto;
   padding: 5px;
   border: 1px solid var(--border-strong);
@@ -1578,16 +1555,20 @@ h6.md-h {
   border-radius: var(--radius);
   box-shadow: var(--shadow);
 }
+.viewer-close,
+.viewer-nav {
+  background: rgb(10 10 12 / 55%);
+  color: #ececef;
+}
+.viewer-close:hover:not(:disabled),
+.viewer-nav:hover:not(:disabled) {
+  background: rgb(10 10 12 / 80%);
+  color: #ffffff;
+}
 .viewer-close {
   position: absolute;
   top: 12px;
   right: 12px;
-  background: rgb(10 10 12 / 55%);
-  color: #ececef;
-}
-.viewer-close:hover {
-  background: rgb(10 10 12 / 80%);
-  color: #ffffff;
 }
 /* Room for the count below the image. */
 .viewer:has(.viewer-count) img {
@@ -1599,12 +1580,6 @@ h6.md-h {
   width: 44px;
   height: 44px;
   transform: translateY(-50%);
-  background: rgb(10 10 12 / 55%);
-  color: #ececef;
-}
-.viewer-nav:hover:not(:disabled) {
-  background: rgb(10 10 12 / 80%);
-  color: #ffffff;
 }
 .viewer-nav:disabled {
   opacity: 0.3;
@@ -1665,7 +1640,7 @@ h6.md-h {
 /* --------------------------------------------------------------- sign in */
 
 .signin {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   padding: 24px;
@@ -1722,8 +1697,7 @@ h6.md-h {
   .shell.sidebar-collapsed {
     grid-template-columns: minmax(0, 1fr);
   }
-  /* The sidebar becomes a drawer, parked off the left edge until the menu
-     button brings it in. */
+  /* The sidebar becomes an off-screen drawer. */
   .sidebar {
     position: fixed;
     top: 0;
@@ -1733,14 +1707,14 @@ h6.md-h {
     height: 100%;
     box-shadow: var(--shadow);
     transform: translateX(-101%);
-    /* Hidden as well as moved, so the keyboard cannot tab into it. */
+    /* Also hidden, so Tab cannot reach it. */
     visibility: hidden;
     transition:
       transform 0.18s ease,
       visibility 0.18s;
   }
-  /* As specific as the collapsed sidebar's rule, which would otherwise keep
-     the drawer shut for someone who collapsed the sidebar on a wide screen. */
+  /* Matches the collapsed sidebar's specificity, so a sidebar collapsed on
+     a wide screen still opens as a drawer. */
   .shell.nav-open .sidebar {
     transform: none;
     visibility: visible;
@@ -1771,7 +1745,7 @@ h6.md-h {
     padding: 8px;
     min-height: 52px;
   }
-  /* The new-chat button goes to the far right, as in phone chat apps. */
+  /* New chat on the far right, as in phone chat apps. */
   .topbar .when-collapsed-or-narrow {
     order: 3;
   }
@@ -1781,8 +1755,7 @@ h6.md-h {
   .dock {
     padding-bottom: 10px;
   }
-  /* Safari on iPhone zooms into a field with smaller text when it is
-     focused, and the zoom pushes the field under the keyboard. */
+  /* iOS Safari zooms into focused fields under 16px. */
   .composer-input {
     font-size: 16px;
   }
@@ -1796,15 +1769,14 @@ h6.md-h {
   .bubble {
     max-width: 92%;
   }
-  /* No hover on a touch screen, so the actions stay in view. */
+  /* No hover on touch screens, so actions stay visible. */
   .msg-actions {
     opacity: 1;
   }
-  /* In the row rather than over the title, which it would hide. */
+  /* In the row, so it does not cover the title. */
   .conv-more {
     position: static;
     opacity: 1;
-    background: none;
   }
   .toasts {
     left: 12px;
@@ -1816,11 +1788,11 @@ h6.md-h {
 @media (prefers-reduced-motion: reduce) {
   .typing span,
   .conv-live,
-  .md.is-streaming > :last-child::after {
+  .md.is-streaming > :last-child::after,
+  .shimmer {
     animation: none;
   }
   .shimmer {
-    animation: none;
     color: var(--muted);
   }
 }

@@ -1,16 +1,12 @@
-// A small Markdown renderer for replies: paragraphs, headings, lists, quotes,
-// tables, fenced code and the usual inline marks.
+// A small Markdown renderer for replies.
 //
-// It builds DOM nodes and never parses a string as HTML, so nothing a model
-// writes can become markup or script. Links open only for http, https and
-// mailto.
+// It builds DOM nodes and never parses HTML, so model output cannot inject
+// markup. Links allow only http, https and mailto.
 //
-// It is forgiving on purpose: it runs on every frame while a reply streams
-// in, so half a table or an unclosed code fence must still draw sensibly.
+// It is forgiving, since it renders partial replies while they stream.
 
 import { h, icon, icons, copyText } from "./ui.js";
 
-/** render turns Markdown into an element. */
 export function render(text) {
   const root = h("div", { class: "md" });
   root.append(
@@ -49,7 +45,7 @@ function blocks(lines) {
       const code = [];
       i++;
       while (i < lines.length) {
-        // A fence closes with a run of the same mark, at least as long.
+        // Closed by the same mark, at least as long.
         const close = lines[i].match(FENCE_CLOSE);
         if (close && close[1][0] === fence[0] && close[1].length >= fence.length) {
           i++;
@@ -98,7 +94,6 @@ function blocks(lines) {
       continue;
     }
 
-    // A paragraph runs until a blank line or the start of another block.
     const para = [line];
     i++;
     while (i < lines.length && lines[i].trim() && !startsBlock(lines[i])) {
@@ -118,8 +113,8 @@ function indentOf(line) {
   return line.match(/^ */)[0].length;
 }
 
-/** parseList reads one list starting at lines[i], with any lists nested in
- *  it, and returns it with the index of the first line after it. */
+/** parseList reads a list at lines[i], with nested lists, and returns it
+ *  with the index of the next line. */
 function parseList(lines, i) {
   const first = lines[i].match(LIST);
   const indent = first[1].length;
@@ -138,8 +133,7 @@ function parseList(lines, i) {
     while (i < lines.length) {
       const line = lines[i];
       if (!line.trim()) {
-        // A blank line belongs to the item when what follows is indented
-        // under it; otherwise the item, and maybe the list, ends here.
+        // A blank line stays in the item only if indented text follows.
         let j = i;
         while (j < lines.length && !lines[j].trim()) j++;
         if (j < lines.length && indentOf(lines[j]) > indent) {
@@ -164,8 +158,7 @@ function parseList(lines, i) {
         i++;
         continue;
       }
-      // A line that is not indented but starts no block carries on the
-      // item's paragraph, as models often write.
+      // Unindented text continues the item, as models often write.
       if (!startsBlock(line)) {
         body.push(line);
         i++;
@@ -174,7 +167,7 @@ function parseList(lines, i) {
       break;
     }
     const parts = blocks(body);
-    // A tight list keeps its items as plain lines, not paragraphs.
+    // Tight lists use plain lines, not paragraphs.
     if (!loose && parts[0]?.tagName === "P") {
       parts.splice(0, 1, ...parts[0].childNodes);
     }
@@ -259,7 +252,7 @@ const LINK =
   /^!?\[((?:[^\][]|\[[^\][]*\])*)\]\(\s*<?([^\s<>()]+(?:\([^\s()]*\))?[^\s<>()]*)>?(?:\s+["'][^"']*["'])?\s*\)/;
 const AUTOLINK = /^https?:\/\/[^\s<>"]+/;
 
-/** inline renders the marks inside one block, line breaks kept. */
+/** inline renders the marks inside one block, keeping line breaks. */
 function inline(text) {
   const out = [];
   let buf = "";
@@ -339,16 +332,15 @@ function inline(text) {
   return out;
 }
 
-/** emphasis finds a mark that opens at i and closes later on, as
- *  { tag, inner, end }, or null. Underscores only count at word edges, so
- *  snake_case names stay as they are. */
+/** emphasis finds a mark opening at i, as { tag, inner, end }, or null.
+ *  Underscores count only at word edges, so snake_case stays as is. */
 function emphasis(text, i) {
   const c = text[i];
   const double = text[i + 1] === c;
   if (c === "~" && !double) return null;
   const marker = double ? c + c : c;
   const from = i + marker.length;
-  // An opening mark is followed by something other than a space.
+  // An opening mark is not followed by a space.
   if (!text[from] || /\s/.test(text[from])) return null;
   if (c === "_" && i > 0 && /\w/.test(text[i - 1])) return null;
 

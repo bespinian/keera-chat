@@ -24,7 +24,7 @@ func TestDefaults(t *testing.T) {
 	if c.GatewayURL != "https://keera.example.ch" || c.GatewayInternalURL != c.GatewayURL {
 		t.Errorf("gateway = %q, internal %q", c.GatewayURL, c.GatewayInternalURL)
 	}
-	// A loopback address, which the gateway accepts without being told.
+	// The gateway allows loopback without setup.
 	if c.PublicURL != "http://127.0.0.1:8090" || c.SecureCookies {
 		t.Errorf("public URL = %q, secure = %v", c.PublicURL, c.SecureCookies)
 	}

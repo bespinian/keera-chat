@@ -1,8 +1,7 @@
 // Package webui serves the chat page.
 //
-// Like the gateway's panel, it is plain ES modules and CSS with no build
-// step, embedded in the binary, so `go build` is the whole build and an
-// air-gapped install needs no npm.
+// It is plain ES modules and CSS, embedded with no build step, so
+// `go build` is the whole build and air-gapped installs need no npm.
 package webui
 
 import (
@@ -22,20 +21,19 @@ import (
 //go:embed assets
 var assets embed.FS
 
-// file is one embedded asset, gzipped once at start-up rather than per
-// request.
+// file is an embedded asset, gzipped once at start-up.
 type file struct {
 	body        []byte
 	contentType string
 	etag        string
-	// gz is the gzipped body, or nil when compressing did not make it smaller.
+	// gz is nil when gzip did not make it smaller.
 	gz     []byte
 	gzEtag string
 }
 
 var (
 	files map[string]file
-	// shell is the document every route that is not a file falls back to.
+	// shell is served for every path that is not a file.
 	shell file
 )
 
@@ -64,9 +62,7 @@ func init() {
 }
 
 func newFile(p string, body []byte) file {
-	// With no build step there are no content-hashed file names. An ETag
-	// gives the same result: a changed file is fetched again, an unchanged one
-	// is a 304.
+	// No build step means no hashed file names, so an ETag does the job.
 	sum := sha256.Sum256(body)
 	tag := `"` + base64.RawURLEncoding.EncodeToString(sum[:12]) + `"`
 	f := file{body: body, contentType: contentTypeFor(p), etag: tag}
@@ -112,8 +108,8 @@ func contentTypeFor(p string) string {
 	}
 }
 
-// Handler serves the assets, and the page for any other path: the page
-// routes on the URL, so /c/<id> loads the same document as /.
+// Handler serves the assets, and the page for any other path, since the
+// page routes on the URL.
 func Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -124,9 +120,7 @@ func Handler() http.Handler {
 		name := path.Clean(r.URL.Path)
 		f, ok := files[name]
 		if !ok {
-			// A missing asset is a 404: the page in its place would hand the
-			// browser HTML where it expected JavaScript, which fails later and
-			// less clearly.
+			// HTML in place of a missing script would fail less clearly.
 			if strings.HasPrefix(name, "/assets/") {
 				http.NotFound(w, r)
 				return
@@ -148,8 +142,7 @@ func Handler() http.Handler {
 	})
 }
 
-// acceptsGzip reports whether an Accept-Encoding header allows gzip, and does
-// not refuse it with q=0.
+// acceptsGzip reports whether Accept-Encoding allows gzip with q > 0.
 func acceptsGzip(header string) bool {
 	for part := range strings.SplitSeq(header, ",") {
 		name, params, _ := strings.Cut(strings.TrimSpace(part), ";")

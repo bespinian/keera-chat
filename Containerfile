@@ -19,7 +19,7 @@ COPY --from=build /out/keera-chat /keera-chat
 
 COPY LICENSE /LICENSE
 
-# nobody:nogroup. There is no /etc/passwd here, so the id has to be numeric.
+# nobody:nogroup. Numeric, since there is no /etc/passwd.
 USER 65534:65534
 
 EXPOSE 8090

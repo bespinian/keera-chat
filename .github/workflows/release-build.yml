@@ -1,14 +1,10 @@
-# How a release is built and attested. release.yml calls this on a `v*` tag;
-# it has no trigger of its own.
+# Builds and attests a release. Called by release.yml.
 #
-# Laid out for SLSA Build L3: the build cannot forge its own provenance.
-#
-# - The build job runs our code (make, go, podman) and gets no id-token
-#   permission, so nothing it runs can get a signing token. Only the
-#   provenance job gets one, and it checks out nothing and runs only GitHub's
-#   actions, signing the image digest it is handed.
-# - This is a reusable workflow, so the signature names this file, not the
-#   caller. `gh attestation verify --signer-workflow` checks for it.
+# SLSA Build L3: the build can't forge its own provenance.
+# - The build job runs our code and gets no id-token. Only the provenance job
+#   signs, and it runs only GitHub's actions.
+# - As a reusable workflow, the signature names this file.
+#   `gh attestation verify --signer-workflow` checks for it.
 name: Release build
 
 on:
@@ -29,8 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # The image is named after the binary, so only the owner comes from the
-      # environment. ghcr.io needs a lowercase path, and owner names may not be.
+      # ghcr.io needs a lowercase owner.
       - name: Name the image
         id: image
         run: |
@@ -38,13 +33,11 @@ jobs:
           echo "name=ghcr.io/$owner/keera-chat" >> "$GITHUB_OUTPUT"
           echo "ref=ghcr.io/$owner/keera-chat:${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
 
-      # `sbom` depends on `image`, so it describes the image this job pushes.
-      # VERSION is what the binary reports, since the build context has no .git
-      # for the toolchain to stamp from.
+      # `sbom` also builds the image. VERSION is set since the context has no .git.
       - name: Build the image and its SBOM
         run: make sbom CHAT_IMAGE='${{ steps.image.outputs.ref }}' VERSION="$GITHUB_REF_NAME"
 
-      # The attestation's subject must be the digest: a tag can be moved later.
+      # Attest the digest, since a tag can move.
       - name: Push
         id: push
         env:
@@ -70,7 +63,7 @@ jobs:
       attestations: write # the attestation itself
       artifact-metadata: write # the storage record for the pushed image
     steps:
-      # The attestation step reads docker's credentials to reach the registry.
+      # The attestation step uses docker's credentials.
       - name: Log in to ghcr.io
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -81,11 +74,10 @@ jobs:
         with:
           subject-name: ${{ needs.image.outputs.name }}
           subject-digest: ${{ needs.image.outputs.digest }}
-          # Also stored next to the image, so `gh attestation verify` and cosign
-          # find it from the image alone, which is all a customer has.
+          # So it can be verified from the image alone.
           push-to-registry: true
 
-  # Last, so a release never shows an image that has no provenance yet.
+  # Last, so a release never shows an image without provenance.
   publish:
     name: Publish the release
     needs: image-provenance
@@ -98,8 +90,7 @@ jobs:
           name: sbom
           path: build/sbom
 
-      # A tag pushed from a workstation has no release yet; one cut from the web
-      # interface does.
+      # Upload if the release was already created in the web UI.
       - name: Publish the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

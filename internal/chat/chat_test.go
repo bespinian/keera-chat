@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
@@ -21,8 +20,7 @@ import (
 	"github.com/bespinian/keera-chat/internal/secret"
 )
 
-// harness is chat in front of the stand-in gateway, and a browser with a
-// cookie jar.
+// harness is chat in front of a fake gateway, and a browser with cookies.
 type harness struct {
 	t    *testing.T
 	gw   *gatewaytest.Gateway
@@ -40,15 +38,14 @@ func newHarness(t *testing.T) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Chat needs its own address before it can serve, so the handler is set
-	// once the server has one.
+	// The handler needs the server's address, so it is set afterwards.
 	var handler http.Handler
 	chatSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		handler.ServeHTTP(w, r)
 	}))
 	t.Cleanup(chatSrv.Close)
 	handler = New(Options{PublicURL: chatSrv.URL, GatewayURL: gwSrv.URL, MaxBodyBytes: 4 << 20},
-		gateway.New(gwSrv.URL), box, slog.New(slog.NewTextHandler(io.Discard, nil))).Handler()
+		gateway.New(gwSrv.URL), box, slog.New(slog.DiscardHandler)).Handler()
 
 	jar, _ := cookiejar.New(nil)
 	return &harness{t: t, gw: gw, chat: chatSrv, c: &http.Client{Jar: jar}}
@@ -66,15 +63,9 @@ func (h *harness) signIn() {
 	}
 }
 
-// do sends a request as the page does, and decodes a JSON answer into out.
-func (h *harness) do(method, path string, in, out any) int {
+func (h *harness) do(method, path string, out any) int {
 	h.t.Helper()
-	var body io.Reader
-	if in != nil {
-		b, _ := json.Marshal(in)
-		body = bytes.NewReader(b)
-	}
-	req, _ := http.NewRequest(method, h.chat.URL+path, body)
+	req, _ := http.NewRequest(method, h.chat.URL+path, nil)
 	req.Header.Set("X-Keera-Chat", "1")
 	req.Header.Set("Content-Type", "application/json")
 	res, err := h.c.Do(req)
@@ -93,10 +84,8 @@ type event struct {
 	data json.RawMessage
 }
 
-// ask is a conversation of one message from the person.
 func ask(text string) []turn { return []turn{{Role: "user", Content: text}} }
 
-// send posts a conversation and reads the whole reply stream.
 func (h *harness) send(in map[string]any) (int, []event) {
 	h.t.Helper()
 	return h.sendCtx(context.Background(), in, nil)
@@ -111,14 +100,14 @@ func (h *harness) sendCtx(ctx context.Context, in map[string]any, each func(even
 		in["key_id"] = gatewaytest.KeyID
 	}
 	b, _ := json.Marshal(in)
-	req, _ := http.NewRequestWithContext(ctx, "POST", h.chat.URL+"/api/chat", bytes.NewReader(b))
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, h.chat.URL+"/api/chat", bytes.NewReader(b))
 	req.Header.Set("X-Keera-Chat", "1")
 	res, err := h.c.Do(req)
 	if err != nil {
 		h.t.Fatal(err)
 	}
 	defer func() { _ = res.Body.Close() }()
-	if res.StatusCode != 200 {
+	if res.StatusCode != http.StatusOK {
 		return res.StatusCode, nil
 	}
 	var evs []event
@@ -141,17 +130,18 @@ func (h *harness) sendCtx(ctx context.Context, in map[string]any, each func(even
 	return 200, evs
 }
 
-func lastOf(t *testing.T, evs []event, name string, v any) {
+// done decodes the last "done" event into v.
+func done(t *testing.T, evs []event, v any) {
 	t.Helper()
 	for _, ev := range slices.Backward(evs) {
-		if ev.name == name {
+		if ev.name == "done" {
 			if err := json.Unmarshal(ev.data, v); err != nil {
 				t.Fatal(err)
 			}
 			return
 		}
 	}
-	t.Fatalf("no %q event in %d events", name, len(evs))
+	t.Fatalf("no done event in %d events", len(evs))
 }
 
 func roles(body map[string]any) string {
@@ -167,12 +157,12 @@ func TestSignedOut(t *testing.T) {
 	var out struct {
 		Error struct{ Code string } `json:"error"`
 	}
-	if got := h.do("GET", "/api/me", nil, &out); got != 401 || out.Error.Code != "signed_out" {
+	if got := h.do("GET", "/api/me", &out); got != 401 || out.Error.Code != "signed_out" {
 		t.Fatalf("GET /api/me signed out = %d %q, want 401 signed_out", got, out.Error.Code)
 	}
 	// The sign-in screen still works.
 	var cfg map[string]any
-	if got := h.do("GET", "/auth/config", nil, &cfg); got != 200 || cfg["passkeys"] != true {
+	if got := h.do("GET", "/auth/config", &cfg); got != 200 || cfg["passkeys"] != true {
 		t.Fatalf("GET /auth/config = %d %v", got, cfg)
 	}
 }
@@ -200,7 +190,7 @@ func TestMe(t *testing.T) {
 		}
 		PendingKeys int `json:"pending_keys"`
 	}
-	if got := h.do("GET", "/api/me", nil, &me); got != 200 {
+	if got := h.do("GET", "/api/me", &me); got != 200 {
 		t.Fatalf("GET /api/me = %d", got)
 	}
 	if me.User.ID != gatewaytest.UserID || me.User.Email != "ada@example.ch" || len(me.User.Orgs) != 2 {
@@ -220,8 +210,7 @@ func TestMe(t *testing.T) {
 	if len(me.Models) != 3 || me.PendingKeys != 1 {
 		t.Fatalf("models = %+v, pending = %d", me.Models, me.PendingKeys)
 	}
-	// A router picks a model per message, so it has no context of its own,
-	// but it has a name for people like a model.
+	// A router has a name but no context size.
 	wantContext := map[string]int{"keera-speed": 131072, "keera-think": 262144}
 	for _, m := range me.Models {
 		if want := wantContext[m.Alias]; m.Context != want {
@@ -236,16 +225,16 @@ func TestMe(t *testing.T) {
 func TestCrossSiteRefused(t *testing.T) {
 	h := newHarness(t)
 	h.signIn()
-	req, _ := http.NewRequest("POST", h.chat.URL+"/api/chat", strings.NewReader(`{}`))
+	req, _ := http.NewRequest(http.MethodPost, h.chat.URL+"/api/chat", strings.NewReader(`{}`))
 	res, err := h.c.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_ = res.Body.Close()
-	if res.StatusCode != 403 {
+	if res.StatusCode != http.StatusForbidden {
 		t.Fatalf("a POST without the page's header = %d, want 403", res.StatusCode)
 	}
-	req, _ = http.NewRequest("POST", h.chat.URL+"/api/chat", strings.NewReader(`{}`))
+	req, _ = http.NewRequest(http.MethodPost, h.chat.URL+"/api/chat", strings.NewReader(`{}`))
 	req.Header.Set("X-Keera-Chat", "1")
 	req.Header.Set("Sec-Fetch-Site", "cross-site")
 	res, err = h.c.Do(req)
@@ -253,7 +242,7 @@ func TestCrossSiteRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = res.Body.Close()
-	if res.StatusCode != 403 {
+	if res.StatusCode != http.StatusForbidden {
 		t.Fatalf("a cross-site POST = %d, want 403", res.StatusCode)
 	}
 }
@@ -268,7 +257,7 @@ func TestReply(t *testing.T) {
 		t.Fatalf("POST /api/chat = %d", status)
 	}
 	var reply Message
-	lastOf(t, evs, "done", &reply)
+	done(t, evs, &reply)
 	if !strings.HasPrefix(reply.Content, "Here is what you wrote") || reply.Reasoning == "" ||
 		reply.Finish != "stop" || reply.Model != "keera-think" {
 		t.Fatalf("reply = %+v", reply)
@@ -279,7 +268,7 @@ func TestReply(t *testing.T) {
 	if got := roles(h.gw.LastChat()); got != "user" {
 		t.Errorf("first request roles = %s", got)
 	}
-	// The model server's count comes back only when asked for.
+	// Token usage is asked for.
 	if opts, _ := h.gw.LastChat()["stream_options"].(map[string]any); opts["include_usage"] != true {
 		t.Errorf("stream_options = %v, want the usage asked for", h.gw.LastChat()["stream_options"])
 	}
@@ -287,7 +276,7 @@ func TestReply(t *testing.T) {
 		t.Errorf("tokens = %d, want the prompt and the reply", reply.Tokens)
 	}
 
-	// Custom instructions go first, and the conversation so far follows.
+	// Custom instructions go first.
 	h.send(map[string]any{"instructions": " Be brief. ", "messages": []turn{
 		{Role: "user", Content: "Hello there"},
 		{Role: "assistant", Content: reply.Content},
@@ -303,42 +292,38 @@ func TestReply(t *testing.T) {
 
 	// A refusal comes back as a reply with the gateway's words.
 	_, evs = h.send(map[string]any{"messages": ask("Is my budget OK?")})
-	lastOf(t, evs, "done", &reply)
+	done(t, evs, &reply)
 	if !strings.Contains(reply.Error, "budget of project Research is spent") {
 		t.Fatalf("refused reply = %+v", reply)
 	}
 
-	// Words not meant for a person, a model server's or the gateway's for
-	// agents, are kept as the detail, under plain ones that name the model,
-	// by the page's name for it or else by its alias. What arrived before a
-	// failure is kept.
+	// Technical errors become plain words naming the model, with the original
+	// as the detail. What arrived before a failure is kept.
 	for name, c := range map[string]struct{ ask, model, err, detail, content string }{
 		"overloaded":          {"Are you overloaded?", "Keera Speed", "Keera Speed is not working right now", "The engine is currently overloaded", ""},
 		"overloaded, no name": {"Are you overloaded?", "", "keera-speed is not working right now", "The engine is currently overloaded", ""},
-		// The gateway's words for agents would have a person compact the
-		// conversation, which chat cannot do.
+		// The gateway's words for agents say to compact, which chat cannot do.
 		"too long":          {"Is this too long?", "Keera Speed", "This conversation is too long for Keera Speed.", "prompt is too long", ""},
 		"too long, no name": {"Is this too long?", "", "This conversation is too long for keera-speed.", "prompt is too long", ""},
 		"broken":            {"Is this broken?", "Keera Speed", "Something went wrong", "CUDA error", "Let me think about "},
-		// A model server's 401 is about its credentials, not the person's
-		// sign-in, which stays.
+		// A model server's 401 does not end the sign-in.
 		"credentials": {"Are your credentials OK?", "Keera Speed", "Keera Speed is not set up correctly", "Incorrect API key", ""},
 	} {
 		_, evs = h.send(map[string]any{"messages": ask(c.ask), "model_name": c.model})
 		var reply Message
-		lastOf(t, evs, "done", &reply)
+		done(t, evs, &reply)
 		if !strings.HasPrefix(reply.Error, c.err) || !strings.HasPrefix(reply.ErrorDetail, c.detail) {
 			t.Errorf("%s: error = %q, detail = %q", name, reply.Error, reply.ErrorDetail)
 		}
 		if reply.Content != c.content {
 			t.Errorf("%s: content = %q, want %q", name, reply.Content, c.content)
 		}
-		if status := h.do("GET", "/api/me", nil, nil); status != http.StatusOK {
+		if status := h.do("GET", "/api/me", nil); status != http.StatusOK {
 			t.Errorf("%s: /api/me = %d after the reply", name, status)
 		}
 	}
 
-	// A failed turn is left out of what is sent next, with its question.
+	// A failed turn is not sent again, nor is its question.
 	h.send(map[string]any{"messages": []turn{
 		{Role: "user", Content: "Hello there"},
 		{Role: "assistant", Content: "Hi."},
@@ -401,7 +386,7 @@ func TestFiles(t *testing.T) {
 		t.Errorf("content = %q, want %q", got, want)
 	}
 
-	// A file alone is a message, and goes with the images as their text.
+	// A file alone is a message, sent as text with the images.
 	img := "data:image/png;base64,iVBORw0KGgo="
 	h.send(map[string]any{"messages": []turn{{Role: "user", Images: []string{img}, Files: []textFile{notes}}}})
 	parts := h.gw.LastChat()["messages"].([]any)[0].(map[string]any)["content"].([]any)
@@ -410,8 +395,7 @@ func TestFiles(t *testing.T) {
 	}
 }
 
-// TestStop checks that stopping a reply in the page ends the request to the
-// gateway, and so the model's work.
+// TestStop checks that stopping a reply ends the request to the gateway.
 func TestStop(t *testing.T) {
 	h := newHarness(t)
 	h.signIn()
@@ -437,8 +421,8 @@ func TestStop(t *testing.T) {
 	}
 }
 
-// TestAReplyOutlastsTheListenerTimeouts checks that a reply streaming for
-// longer than the listener's timeouts arrives whole, not cut off as if stopped.
+// TestAReplyOutlastsTheListenerTimeouts checks that a long reply is not cut
+// off by the listener's timeouts.
 func TestAReplyOutlastsTheListenerTimeouts(t *testing.T) {
 	h := newHarness(t)
 	h.signIn()
@@ -453,7 +437,7 @@ func TestAReplyOutlastsTheListenerTimeouts(t *testing.T) {
 	// The cookie jar ignores the port, so the session reaches the slow server.
 	_, evs := (&harness{t: t, gw: h.gw, chat: slow, c: h.c}).send(map[string]any{"messages": ask("hi")})
 	var reply Message
-	lastOf(t, evs, "done", &reply)
+	done(t, evs, &reply)
 	if reply.Stopped || !strings.HasSuffix(reply.Content, "Anything else?") {
 		t.Fatalf("the reply was cut short: stopped=%v, ends %q", reply.Stopped,
 			reply.Content[max(0, len(reply.Content)-30):])
@@ -463,30 +447,30 @@ func TestAReplyOutlastsTheListenerTimeouts(t *testing.T) {
 func TestSignOut(t *testing.T) {
 	h := newHarness(t)
 	h.signIn()
-	if got := h.do("POST", "/auth/logout", nil, nil); got != 200 {
+	if got := h.do("POST", "/auth/logout", nil); got != 200 {
 		t.Fatalf("POST /auth/logout = %d", got)
 	}
-	if got := h.do("GET", "/api/me", nil, nil); got != 401 {
+	if got := h.do("GET", "/api/me", nil); got != 401 {
 		t.Fatalf("GET /api/me after signing out = %d", got)
 	}
 }
 
-// TestRevokedAtGateway checks that a sign-in ended at the gateway ends here
-// too, even while chat still remembers who the token belonged to.
+// TestRevokedAtGateway checks that a sign-in ended at the gateway ends here,
+// even while it is still cached.
 func TestRevokedAtGateway(t *testing.T) {
 	h := newHarness(t)
 	h.signIn()
-	if got := h.do("GET", "/api/me", nil, nil); got != 200 {
+	if got := h.do("GET", "/api/me", nil); got != 200 {
 		t.Fatalf("GET /api/me = %d", got)
 	}
 	h.gw.Revoke()
 	var out struct {
 		Error struct{ Code string } `json:"error"`
 	}
-	if got := h.do("GET", "/api/me", nil, &out); got != 401 || out.Error.Code != "signed_out" {
+	if got := h.do("GET", "/api/me", &out); got != 401 || out.Error.Code != "signed_out" {
 		t.Fatalf("GET /api/me after revoking = %d %q, want 401 signed_out", got, out.Error.Code)
 	}
-	if got := h.do("GET", "/api/me", nil, nil); got != 401 {
+	if got := h.do("GET", "/api/me", nil); got != 401 {
 		t.Fatalf("the cookie was not cleared: GET /api/me = %d", got)
 	}
 }
@@ -494,7 +478,7 @@ func TestRevokedAtGateway(t *testing.T) {
 func TestCallbackChecksState(t *testing.T) {
 	h := newHarness(t)
 	h.c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	// A sign-in this browser started, so it holds the login cookie.
+	// Start a sign-in, to get the login cookie.
 	res, err := h.c.Get(h.chat.URL + "/auth/login?provider=example")
 	if err != nil {
 		t.Fatal(err)
@@ -512,30 +496,29 @@ func TestCallbackChecksState(t *testing.T) {
 	var cfg struct {
 		SignInError string `json:"sign_in_error"`
 	}
-	h.do("GET", "/auth/config", nil, &cfg)
+	h.do("GET", "/auth/config", &cfg)
 	if !strings.Contains(cfg.SignInError, "not the one this browser started") {
 		t.Fatalf("sign_in_error = %q, want why the sign-in failed", cfg.SignInError)
 	}
 	cfg.SignInError = ""
-	h.do("GET", "/auth/config", nil, &cfg)
+	h.do("GET", "/auth/config", &cfg)
 	if cfg.SignInError != "" {
 		t.Fatalf("sign_in_error = %q the second time, want it shown once", cfg.SignInError)
 	}
 }
 
-// TestSignInErrorNotFromURL checks that the sign-in screen's error cannot be
-// set by a link, so nobody can put their own words on it.
+// TestSignInErrorNotFromURL checks that a link cannot set the sign-in error.
 func TestSignInErrorNotFromURL(t *testing.T) {
 	h := newHarness(t)
 	var cfg map[string]any
-	h.do("GET", "/auth/config?sign_in_error=call+us", nil, &cfg)
+	h.do("GET", "/auth/config?sign_in_error=call+us", &cfg)
 	if cfg["sign_in_error"] != "" {
 		t.Fatalf("sign_in_error = %v, want none", cfg["sign_in_error"])
 	}
 	// A cookie chat did not seal is ignored too.
 	u, _ := url.Parse(h.chat.URL + "/auth")
 	h.c.Jar.SetCookies(u, []*http.Cookie{{Name: errorCookie, Value: "Y2FsbCB1cw", Path: "/auth"}})
-	h.do("GET", "/auth/config", nil, &cfg)
+	h.do("GET", "/auth/config", &cfg)
 	if cfg["sign_in_error"] != "" {
 		t.Fatalf("sign_in_error = %v from a forged cookie, want none", cfg["sign_in_error"])
 	}
@@ -553,7 +536,7 @@ func TestPageAndHeaders(t *testing.T) {
 			t.Fatal(err)
 		}
 		_ = res.Body.Close()
-		if res.StatusCode != 200 || !strings.HasPrefix(res.Header.Get("Content-Type"), want) {
+		if res.StatusCode != http.StatusOK || !strings.HasPrefix(res.Header.Get("Content-Type"), want) {
 			t.Errorf("GET %s = %d %s", path, res.StatusCode, res.Header.Get("Content-Type"))
 		}
 		if !strings.Contains(res.Header.Get("Content-Security-Policy"), "script-src 'self'") {
@@ -566,7 +549,7 @@ func TestPageAndHeaders(t *testing.T) {
 			t.Fatal(err)
 		}
 		_ = res.Body.Close()
-		if res.StatusCode != 404 {
+		if res.StatusCode != http.StatusNotFound {
 			t.Errorf("GET %s = %d, want 404", path, res.StatusCode)
 		}
 	}

@@ -1,10 +1,7 @@
 // Package chat serves Keera Chat: the sign-in, the chat API and the page.
 //
-// Everything a person may do is decided by Keera Gateway. Chat signs them in
-// through the gateway, holds the gateway's sign-in in a sealed cookie, and
-// asks the gateway who they are, which keys they hold and which models those
-// keys may call. It keeps no state of its own: conversations stay in the
-// browser, and each message brings its conversation with it.
+// Keera Gateway decides what a person may do. Chat keeps no state:
+// conversations stay in the browser and each message carries its history.
 package chat
 
 import (
@@ -23,10 +20,8 @@ import (
 )
 
 type Options struct {
-	// PublicURL is this service as a browser reaches it.
-	PublicURL string
-	// GatewayURL is the gateway as a browser reaches it: where a sign-in
-	// starts, and what the account menu links to.
+	// PublicURL and GatewayURL are as a browser reaches them.
+	PublicURL     string
 	GatewayURL    string
 	SecureCookies bool
 	MaxBodyBytes  int64
@@ -42,12 +37,14 @@ type Server struct {
 }
 
 func New(opts Options, gw *gateway.Client, box *secret.Box, log *slog.Logger) *Server {
-	return &Server{opts: opts, gw: gw, box: box, log: log,
-		who: whoCache{entries: map[string]whoEntry{}}}
+	return &Server{
+		opts: opts, gw: gw, box: box, log: log,
+		who: whoCache{entries: map[string]whoEntry{}},
+	}
 }
 
-// Handler routes every request. Paths that are not the API, the sign-in or a
-// file get the page, which routes on the URL itself.
+// Handler routes every request. Unknown paths get the page, which routes
+// itself.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
@@ -65,7 +62,7 @@ func (s *Server) Handler() http.Handler {
 	api("POST /api/org", s.switchOrg)
 	api("POST /api/chat", s.reply)
 
-	// A typo in an API path is a JSON 404, not the page with a 200.
+	// Unknown API paths get a JSON 404, not the page.
 	notFound := func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "there is no "+r.Method+" "+r.URL.Path)
 	}
@@ -78,7 +75,6 @@ func (s *Server) Handler() http.Handler {
 
 // ------------------------------------------------------------ the caller
 
-// caller is a signed-in person, as the gateway knows them.
 type caller struct {
 	token string
 	me    gateway.Me
@@ -86,9 +82,7 @@ type caller struct {
 
 type handler func(http.ResponseWriter, *http.Request, *caller)
 
-// signedIn resolves the session cookie to a person, or answers 401. A
-// sign-in the gateway no longer accepts clears the cookie, so the page goes
-// back to the sign-in screen instead of failing on every click.
+// signedIn resolves the session cookie to a person, or answers 401.
 func (s *Server) signedIn(next handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sess, ok := s.readSession(r)
@@ -105,10 +99,8 @@ func (s *Server) signedIn(next handler) http.Handler {
 	})
 }
 
-// whoCache remembers for a minute who a token belongs to, so a page load does
-// not ask the gateway once per request. A person turned off in the gateway is
-// still refused by the gateway on their next message, and here within the
-// minute.
+// whoCache remembers who a token belongs to for a minute, so a page load
+// does not ask the gateway on every request.
 type whoCache struct {
 	mu      sync.Mutex
 	entries map[string]whoEntry
@@ -121,8 +113,7 @@ type whoEntry struct {
 
 const (
 	whoTTL = time.Minute
-	// whoSweepAt is how many people the cache holds before it drops the
-	// stale ones.
+	// whoSweepAt is the size at which stale entries are dropped.
 	whoSweepAt = 4096
 )
 
@@ -141,7 +132,7 @@ func (s *Server) whoIs(r *http.Request, token string) (gateway.Me, error) {
 	}
 	s.who.mu.Lock()
 	defer s.who.mu.Unlock()
-	// It is swept as it grows rather than on a timer, since only use grows it.
+	// Swept as it grows, not on a timer.
 	if len(s.who.entries) > whoSweepAt {
 		for k, e := range s.who.entries {
 			if now.Sub(e.at) >= whoTTL {
@@ -161,8 +152,8 @@ func (s *Server) forget(token string) {
 
 // ------------------------------------------------------------ middleware
 
-// contentSecurityPolicy matches the gateway panel's, except that images may
-// be data: URLs, since that is how attached images travel.
+// contentSecurityPolicy matches the gateway panel's, but allows data: images
+// for attachments.
 const contentSecurityPolicy = "default-src 'self'; " +
 	"script-src 'self'; " +
 	"style-src 'self' 'unsafe-inline'; " +
@@ -184,10 +175,9 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
-// sameOrigin refuses a state-changing request another site made the browser
-// send. The session cookie is SameSite=Lax, which already keeps it off
-// cross-site POSTs; this is the second lock. The page sends a header no plain
-// form can, and a browser says where a request came from in Sec-Fetch-Site.
+// sameOrigin refuses cross-site writes, as a second lock after SameSite=Lax.
+// The page sends a header no plain form can, and browsers set
+// Sec-Fetch-Site.
 func sameOrigin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -202,8 +192,8 @@ func sameOrigin(next http.Handler) http.Handler {
 	})
 }
 
-// logged writes one line per request. The query is left out, because the
-// sign-in callback carries a one-time code in it, and so is every body.
+// logged writes one line per request. It leaves out the query, which can
+// hold a one-time code, and the body.
 func (s *Server) logged(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -234,8 +224,7 @@ func (r *statusRecorder) WriteHeader(status int) {
 	r.ResponseWriter.WriteHeader(status)
 }
 
-// Unwrap lets http.ResponseController reach the real writer, for Flush and
-// for lifting the write deadline while a reply streams.
+// Unwrap lets http.ResponseController reach the real writer.
 func (r *statusRecorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
 
 // ------------------------------------------------------------ answers
@@ -247,8 +236,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// writeError answers in the gateway's envelope, so the page reads one shape
-// whoever refused.
+// writeError uses the gateway's error shape, so the page reads one shape.
 func writeError(w http.ResponseWriter, status int, code, msg string) {
 	writeJSON(w, status, map[string]any{"error": map[string]string{"code": code, "message": msg}})
 }
@@ -257,10 +245,8 @@ func signedOut(w http.ResponseWriter) {
 	writeError(w, http.StatusUnauthorized, "signed_out", "you are signed out; sign in again")
 }
 
-// gatewayFailed passes on the gateway's refusal with its own status, code
-// and words. Anything else is a failure here, logged and kept vague. A
-// sign-in the gateway no longer accepts ends here too, even if the who-is
-// cache still holds it.
+// gatewayFailed passes on the gateway's refusal as it is. Other errors are
+// logged and kept vague. A rejected sign-in also ends the session here.
 func (s *Server) gatewayFailed(w http.ResponseWriter, r *http.Request, err error) {
 	if gateway.IsUnauthorized(err) {
 		if sess, ok := s.readSession(r); ok {
@@ -290,8 +276,7 @@ func (s *Server) failed(w http.ResponseWriter, r *http.Request, err error) {
 	writeError(w, http.StatusInternalServerError, "internal", "something went wrong in Keera Chat; try again")
 }
 
-// readJSON decodes a request body of at most the configured size into v. When
-// it cannot, it answers the request itself and reports false.
+// readJSON decodes the body into v. On failure it answers and returns false.
 func (s *Server) readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, s.opts.MaxBodyBytes)
 	dec := json.NewDecoder(r.Body)

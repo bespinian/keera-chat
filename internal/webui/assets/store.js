@@ -1,9 +1,7 @@
-// Conversations, kept in this browser's IndexedDB. Keera Chat's server keeps
-// none: each message brings its conversation with it.
+// Conversations, kept in this browser's IndexedDB. The server keeps none.
 //
 // A browser may be shared, so everything belongs to an owner: one person in
-// one organisation. A conversation is kept whole, and a small summary of it
-// beside, so the sidebar does not read every image to show the titles.
+// one organisation. Small summaries let the sidebar skip loading images.
 
 const name = "keera-chat";
 
@@ -11,13 +9,7 @@ let opening = null;
 
 function database() {
   opening ||= new Promise((resolve, reject) => {
-    let req;
-    try {
-      req = indexedDB.open(name, 1);
-    } catch (err) {
-      reject(err);
-      return;
-    }
+    const req = indexedDB.open(name, 1);
     req.onupgradeneeded = () => {
       const db = req.result;
       db.createObjectStore("conversations", { keyPath: "id" });
@@ -26,8 +18,7 @@ function database() {
     };
     req.onsuccess = () => {
       const db = req.result;
-      // A newer page in another tab needs this one to let go before it can
-      // change the database.
+      // Let a newer page in another tab upgrade the database.
       db.onversionchange = () => db.close();
       resolve(db);
     };
@@ -39,8 +30,8 @@ function database() {
   return opening;
 }
 
-/** run does the work fn starts in one transaction, and resolves with the
- *  result of the request fn returns, once all of it is written. */
+/** run runs fn in one transaction and resolves with its request's result
+ *  once the transaction completes. */
 async function run(stores, mode, fn) {
   const db = await database();
   return new Promise((resolve, reject) => {
@@ -58,8 +49,7 @@ function reason(err) {
   return "The browser said: " + (err?.message || "no reason given") + ".";
 }
 
-/** keep writes a conversation and its summary in t, so the sidebar never lists
- *  a chat other than as it is kept. */
+/** keep writes a conversation and its summary together, so they match. */
 function keep(t, c) {
   t.objectStore("conversations").put(c);
   t.objectStore("summaries").put({ ...summary(c), owner: c.owner });
@@ -72,22 +62,21 @@ function forget(t, id) {
 
 const newestFirst = (a, b) => (a.updated_at < b.updated_at ? 1 : -1);
 
-/** chats is the conversations and settings of one owner. */
+/** chats is one owner's conversations and settings. */
 export function chats(owner) {
   return {
-    /** list is the summaries, the most recently used first. */
+    /** list returns summaries, newest first. */
     async list() {
       const all = await run(["summaries"], "readonly", (t) => t.objectStore("summaries").index("owner").getAll(owner));
       return all.sort(newestFirst);
     },
 
-    /** find is a conversation, or null when this owner has none by that id. */
+    /** find returns a conversation, or null if this owner has none. */
     async find(id) {
       const c = await run(["conversations"], "readonly", (t) => t.objectStore("conversations").get(id));
       return c && c.owner === owner ? c : null;
     },
 
-    /** save keeps a conversation and moves it to the top of the list. */
     async save(conv) {
       const kept = {
         id: conv.id,
@@ -97,15 +86,14 @@ export function chats(owner) {
         key_id: conv.key_id,
         created_at: conv.created_at,
         updated_at: conv.updated_at,
-        // Leave out what the page uses only while showing it.
+        // Drop view-only fields.
         messages: conv.messages.map(({ streaming, showReasoning, ...m }) => m),
       };
       await run(["conversations", "summaries"], "readwrite", (t) => keep(t, kept));
       keepForGood();
     },
 
-    /** rename changes a title. Renaming is not using: the conversation keeps
-     *  its place in the list. */
+    /** rename keeps updated_at, so the chat keeps its place in the list. */
     rename(id, title) {
       return run(["conversations", "summaries"], "readwrite", (t) => {
         const req = t.objectStore("conversations").get(id);
@@ -122,8 +110,7 @@ export function chats(owner) {
       return run(["conversations", "summaries"], "readwrite", (t) => forget(t, id));
     },
 
-    /** removeAll deletes every conversation of the owner, and keeps their
-     *  settings. */
+    /** removeAll deletes all of the owner's chats but keeps settings. */
     removeAll() {
       return run(["conversations", "summaries"], "readwrite", (t) => {
         const req = t.objectStore("summaries").index("owner").getAllKeys(owner);
@@ -133,13 +120,11 @@ export function chats(owner) {
       });
     },
 
-    /** exportAll is every conversation of the owner and their instructions,
-     *  as a file another browser can import. It leaves the owner out, so the
-     *  file can be imported under another organisation too. */
+    /** exportAll returns the owner's chats and instructions as a file. The
+     *  owner is left out, so another organisation can import it. */
     async exportAll() {
       const all = [];
-      // Going through the summaries' owner index means other people's chats,
-      // and their images, are never read.
+      // Use the owner index so other people's chats are never read.
       const settings = await run(["summaries", "conversations", "settings"], "readonly", (t) => {
         const ids = t.objectStore("summaries").index("owner").getAllKeys(owner);
         ids.onsuccess = () => {
@@ -150,10 +135,7 @@ export function chats(owner) {
         };
         return t.objectStore("settings").get(owner);
       });
-      const conversations = all
-        .filter((c) => c.owner === owner)
-        .sort(newestFirst)
-        .map(({ owner, ...c }) => c);
+      const conversations = all.sort(newestFirst).map(({ owner, ...c }) => c);
       return {
         format: exportFormat,
         version: 1,
@@ -163,12 +145,12 @@ export function chats(owner) {
       };
     },
 
-    /** importAll keeps the conversations of an exported file. A conversation
-     *  already here is replaced only by a newer copy of it, so importing the
-     *  same file twice adds nothing. Ids in skip are left alone. The
-     *  instructions are taken only when the owner has none yet. */
-    async importAll(file, skip = new Set()) {
-      const { conversations, instructions } = parseExport(file);
+    /** importAll adds the chats of an exported file's text. A chat is
+     *  replaced only by a newer copy, so importing twice adds nothing. Ids in
+     *  skip are left alone. Instructions are taken only if the owner has
+     *  none. */
+    async importAll(text, skip = new Set()) {
+      const { conversations, instructions } = parseExport(text);
       const result = { added: 0, updated: [] };
       await run(["conversations", "summaries", "settings"], "readwrite", (t) => {
         for (const c of conversations) {
@@ -180,7 +162,7 @@ export function chats(owner) {
               if (here.updated_at >= c.updated_at) return;
               result.updated.push(c.id);
             } else {
-              // The same chat, imported by someone else who shares this browser.
+              // Another owner in this browser has the same chat.
               if (here) c.id = newID();
               result.added++;
             }
@@ -214,10 +196,15 @@ export function chats(owner) {
 
 const exportFormat = "keera-chat";
 
-/** parseExport checks an exported file and keeps only what the page itself
- *  would have written. A file can come from anywhere, so an image must be an
- *  image, and an id one the page can route to. */
-function parseExport(file) {
+/** parseExport validates an exported file's text and keeps only known
+ *  fields. The file is untrusted. */
+function parseExport(text) {
+  let file;
+  try {
+    file = JSON.parse(text);
+  } catch {
+    // Not JSON. Refused below.
+  }
   if (!file || file.format !== exportFormat || !Array.isArray(file.conversations)) {
     throw new Error("This is not a file exported from Keera Chat.");
   }
@@ -235,12 +222,12 @@ function parseExport(file) {
 }
 
 const idPattern = /^c[0-9a-f]{24}$/;
-// The image types and count, and the files, chat.js attaches and
-// internal/chat/turns.go accepts, so an imported chat can be sent on.
-const imagePattern = /^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+=*$/;
-const maxImages = 10;
-const maxFiles = 10;
-const maxFileBytes = 512 << 10;
+// Must match internal/chat/turns.go, so imported chats can be sent.
+export const imageTypes = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+export const maxImages = 10;
+export const maxFiles = 10;
+export const maxFileBytes = 512 << 10;
+const imagePattern = new RegExp(`^data:(${imageTypes.join("|")});base64,[A-Za-z0-9+/]+=*$`);
 
 function conversation(c) {
   if (!c || typeof c !== "object") throw new Error("it is not a chat.");
@@ -273,7 +260,7 @@ function message(m) {
     kept.images = m.images;
   }
   if (m.pdfs != null) {
-    // Each PDF is a run of the message's images, and runs do not overlap.
+    // Each PDF is a run of the message's images. Runs do not overlap.
     let end = 0;
     const ok = (p) => {
       const fits = p && typeof p.name === "string" && Number.isSafeInteger(p.at) && Number.isSafeInteger(p.pages);
@@ -312,29 +299,25 @@ function text(v) {
   return typeof v === "string" ? v : "";
 }
 
-/** time is an ISO time in the form the page writes, so times compare as
- *  strings, or "" when v is none. */
+/** time normalizes v to ISO, so times compare as strings. "" if invalid. */
 function time(v) {
   const d = typeof v === "string" ? new Date(v) : null;
   return d && !isNaN(d) ? d.toISOString() : "";
 }
 
-/** summary is what the sidebar lists of a conversation. */
+/** summary is what the sidebar shows of a conversation. */
 export function summary(c) {
   return { id: c.id, title: c.title, model: c.model, updated_at: c.updated_at };
 }
 
-/** newID names a new conversation. It is random, so ids say nothing about
- *  who chats or when. */
+/** newID is random, so ids reveal nothing about who or when. */
 export function newID() {
   const b = crypto.getRandomValues(new Uint8Array(12));
   return "c" + [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
 }
 
-/** exclusive runs fn while no other tab of this browser runs it for the same
- *  conversation, so two tabs cannot both write a reply into it and lose one.
- *  Where the browser has no locks, as on plain http away from this machine,
- *  fn just runs. */
+/** exclusive runs fn unless another tab is replying in the same chat, then
+ *  calls busy. Without Web Locks (plain http, not localhost), fn just runs. */
 export function exclusive(id, fn, busy) {
   if (!id || !navigator.locks) return fn();
   return navigator.locks.request("keera.chat.reply." + id, { ifAvailable: true }, (lock) => (lock ? fn() : busy()));
@@ -342,9 +325,8 @@ export function exclusive(id, fn, busy) {
 
 let persisting = false;
 
-/** keepForGood asks the browser not to clear the chats when it runs short of
- *  space. Some browsers ask the person first, so it is asked once a chat is
- *  kept, not when the page opens. */
+/** keepForGood asks for persistent storage. Some browsers prompt, so it
+ *  waits until a chat is saved. */
 function keepForGood() {
   if (persisting || !navigator.storage?.persist) return;
   persisting = true;

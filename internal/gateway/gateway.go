@@ -1,10 +1,9 @@
-// Package gateway is Keera Gateway as Keera Chat sees it: the few control API
-// routes a chat needs, called with the person's own sign-in.
+// Package gateway calls the Keera Gateway control API with the person's
+// sign-in.
 //
-// Chat holds no API key secrets. A person's messages go through the gateway's
-// playground route, which sends them with one of the person's keys named by
-// id. So they meet that key's guardrails, budgets and filters, are logged in
-// the audit log, and show in the person's usage, like any other request.
+// Chat holds no API key secrets. Messages go through the playground route
+// with one of the person's keys, by id. So that key's guardrails, budgets,
+// audit log and usage all apply.
 package gateway
 
 import (
@@ -20,23 +19,19 @@ import (
 	"time"
 )
 
-// ControlPrefix is where the gateway serves its control API.
+// ControlPrefix is the control API's path.
 const ControlPrefix = "/control"
 
-// ClientName is how chat names itself to the gateway, so its requests are
-// told apart from the panel's playground in usage and on the map.
+// ClientName tells chat's requests apart from the panel's playground.
 const ClientName = "keera-chat"
 
-// NoAnswer is what a person is told when the gateway cannot be reached, or
-// gave an answer chat cannot read.
+// NoAnswer is shown when the gateway is unreachable or its answer unreadable.
 const NoAnswer = "Keera Gateway did not answer; try again in a moment"
 
-// TooLarge is what a person is told when a conversation is too large to send,
-// whether chat or the gateway refused it.
+// TooLarge is shown when a conversation is too large to send.
 const TooLarge = "This chat is too large to send. Start a new chat, or attach fewer or smaller images."
 
-// callTimeout bounds every call but the chat itself, whose reply can take
-// minutes.
+// callTimeout bounds every call but Chat, whose reply can take minutes.
 const callTimeout = 20 * time.Second
 
 type Client struct {
@@ -44,41 +39,34 @@ type Client struct {
 	http *http.Client
 }
 
-// New returns a client for the gateway at base, an origin such as
-// http://gateway:8080.
+// New returns a client for the gateway at base, such as http://gateway:8080.
 func New(base string) *Client {
 	t := http.DefaultTransport.(*http.Transport).Clone()
 	t.MaxIdleConnsPerHost = 32
 	return &Client{base: strings.TrimRight(base, "/"), http: &http.Client{
 		Transport: t,
-		// A redirect from the control API means a proxy in front of it is
-		// sending us to a sign-in page. Following it would lose the bearer
-		// token and parse HTML as JSON.
+		// A redirect means a proxy's sign-in page. Following it would drop
+		// the token and parse HTML as JSON.
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}}
 }
 
-// Error is a refusal, worded for a person.
+// Error is a refusal, worded for people.
 type Error struct {
-	Status int
-	Code   string
-	// Message is what the person is told.
+	Status  int
+	Code    string
 	Message string
-	// Detail is the text Message stands in for, when it was not shown: a
-	// model server's words, passed on by the gateway, or the gateway's own
-	// when they were not meant for a person.
+	// Detail is the original text when Message replaced it.
 	Detail string
-	// plain is set when Message is chat's own wording, not the gateway's.
+	// plain means Message is chat's wording, not the gateway's.
 	plain bool
 }
 
 func (e *Error) Error() string { return e.Message }
 
-// NewError words an error for a person. The gateway's own refusals carry a
-// code and are written for people, so they are shown as they are. Anything
-// else, such as a model server's error, and the few codes that are about the
-// gateway's insides or worded for agents, get a plain sentence instead, with
-// the text kept as the detail.
+// NewError words an error for people. Gateway refusals with a code are
+// shown as they are. Others, and codes in reworded, get a plain sentence,
+// with the original kept as Detail.
 func NewError(status int, code Code, msg string) *Error {
 	e := &Error{Status: status, Code: string(code), Message: msg}
 	if code == "" || msg == "" || reworded[e.Code] {
@@ -87,14 +75,12 @@ func NewError(status int, code Code, msg string) *Error {
 	return e
 }
 
-// reword puts chat's own wording in place of the message, which is kept as
-// the detail.
+// reword replaces Message with chat's wording and keeps it as Detail.
 func (e *Error) reword() {
 	e.Message, e.Detail, e.plain = plain(e.Status, e.Code, ""), e.Message, true
 }
 
-// Naming puts the model's name in chat's own wording, so the person knows
-// which model failed. The gateway's own words are left as they are.
+// Naming adds the model's name to chat's own wording.
 func (e *Error) Naming(model string) *Error {
 	if e.plain {
 		e.Message = plain(e.Status, e.Code, model)
@@ -102,17 +88,14 @@ func (e *Error) Naming(model string) *Error {
 	return e
 }
 
-// reworded are the gateway's own codes whose words are not for a person:
-// those about its insides, and tooLong.
+// reworded are gateway codes whose messages are not meant for people.
 var reworded = map[string]bool{"upstream_error": true, "upstream_unavailable": true, tooLong: true}
 
-// tooLong is the code the gateway gives a conversation that does not fit in
-// the model's context. Its words are for agents, which compact a conversation
-// when they read them, so a person gets chat's own.
+// tooLong is the gateway's code for exceeding the context. Its message is
+// meant for agents, which compact on it.
 const tooLong = "context_length_exceeded"
 
-// plain says in simple words what went wrong, for an error with no words of
-// its own a person could follow. model is the model's name, if known.
+// plain says what went wrong in simple words. model may be empty.
 func plain(status int, code, model string) string {
 	if code == tooLong {
 		if model == "" {
@@ -146,9 +129,8 @@ func plain(status int, code, model string) string {
 	return "Something went wrong. Try again."
 }
 
-// Code is an error's code. The gateway's are text. A model server's error it
-// passes on may have a number, such as vLLM's, which is left out rather than
-// failing the whole error.
+// Code is an error code. A numeric code, such as vLLM's, is ignored rather
+// than failing the whole error.
 type Code string
 
 func (c *Code) UnmarshalJSON(b []byte) error {
@@ -159,20 +141,17 @@ func (c *Code) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// unauthenticated is the code the gateway gives a sign-in it does not accept.
+// unauthenticated is the gateway's code for a rejected sign-in.
 const unauthenticated = "unauthenticated"
 
-// IsUnauthorized reports whether the gateway no longer accepts the sign-in:
-// it expired, was ended, or the person was turned off. Another 401 is not
-// about the sign-in: the chat route passes on a model server's as it came.
+// IsUnauthorized reports whether the sign-in is no longer valid. Other 401s
+// may come from a model server.
 func IsUnauthorized(err error) bool {
 	e, ok := errors.AsType[*Error](err)
 	return ok && e.Status == http.StatusUnauthorized && e.Code == unauthenticated
 }
 
-// ---------------------------------------------------------------- types
-
-// AuthConfig is how the gateway offers signing in.
+// AuthConfig lists the gateway's sign-in options.
 type AuthConfig struct {
 	SSO       bool       `json:"sso"`
 	Providers []Provider `json:"providers"`
@@ -190,7 +169,7 @@ type Token struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-// Me is who a sign-in belongs to.
+// Me is the signed-in person.
 type Me struct {
 	UserID  string       `json:"user_id"`
 	Email   string       `json:"email"`
@@ -207,7 +186,7 @@ type Membership struct {
 	Invited bool   `json:"invited"`
 }
 
-// Access is the person's own keys, with what each may call.
+// Access is the person's keys.
 type Access struct {
 	Keys []Key `json:"keys"`
 }
@@ -223,8 +202,7 @@ type Key struct {
 	Scopes        []Scope  `json:"scopes"`
 }
 
-// Scope is one level of limits above a key: the organisation, the project
-// or the key itself.
+// Scope is one level of limits: organisation, project or key.
 type Scope struct {
 	Type         string     `json:"type"`
 	Name         string     `json:"name"`
@@ -241,8 +219,7 @@ type Model struct {
 	DisplayName  string `json:"display_name"`
 	Description  string `json:"description"`
 	Subscription bool   `json:"subscription"`
-	// MaxContext is how many tokens the model reads at most, or 0 when the
-	// organisation did not say.
+	// MaxContext is the context size in tokens, or 0 if unknown.
 	MaxContext int `json:"max_context_tokens"`
 }
 
@@ -252,16 +229,14 @@ type Router struct {
 	Description string `json:"description"`
 }
 
-// ---------------------------------------------------------------- calls
-
 func (c *Client) AuthConfig(ctx context.Context) (AuthConfig, error) {
 	var out AuthConfig
 	err := c.call(ctx, "GET", "/auth/config", "", nil, &out)
 	return out, err
 }
 
-// Redeem trades the one-time code a sign-in came back with for a token. The
-// verifier proves this service started that sign-in.
+// Redeem trades a sign-in's one-time code for a token. The verifier proves
+// chat started that sign-in.
 func (c *Client) Redeem(ctx context.Context, code, verifier, label string) (Token, error) {
 	var out Token
 	err := c.call(ctx, "POST", "/auth/cli/token", "", map[string]string{
@@ -280,7 +255,7 @@ func (c *Client) Me(ctx context.Context, token string) (Me, error) {
 	return out, err
 }
 
-// SwitchOrg moves the sign-in to another organisation the person is in.
+// SwitchOrg moves the sign-in to another organisation.
 func (c *Client) SwitchOrg(ctx context.Context, token, orgID string) error {
 	return c.call(ctx, "POST", "/v1/me/org", token, map[string]string{"org_id": orgID}, nil)
 }
@@ -292,26 +267,26 @@ func (c *Client) Access(ctx context.Context, token string) (Access, error) {
 }
 
 func (c *Client) Models(ctx context.Context, token, orgID string) ([]Model, error) {
-	var out struct {
-		Data []Model `json:"data"`
-	}
-	err := c.call(ctx, "GET", "/v1/models?"+url.Values{"org_id": {orgID}}.Encode(), token, nil, &out)
-	return out.Data, err
+	return list[Model](ctx, c, "/v1/models", token, orgID)
 }
 
 func (c *Client) Routers(ctx context.Context, token, orgID string) ([]Router, error) {
+	return list[Router](ctx, c, "/v1/routers", token, orgID)
+}
+
+// list reads an organisation's {"data": [...]}.
+func list[T any](ctx context.Context, c *Client, path, token, orgID string) ([]T, error) {
 	var out struct {
-		Data []Router `json:"data"`
+		Data []T `json:"data"`
 	}
-	err := c.call(ctx, "GET", "/v1/routers?"+url.Values{"org_id": {orgID}}.Encode(), token, nil, &out)
+	err := c.call(ctx, "GET", path+"?"+url.Values{"org_id": {orgID}}.Encode(), token, nil, &out)
 	return out.Data, err
 }
 
-// Chat sends one OpenAI chat completions request with the person's key
-// keyID, and returns the response for the caller to stream and close. ctx
-// bounds the whole reply, so cancelling it stops the model.
+// Chat sends a chat completions request with key keyID. The caller streams
+// and closes the response. Cancelling ctx stops the model.
 func (c *Client) Chat(ctx context.Context, token, keyID string, body []byte) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, "POST",
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		c.base+ControlPrefix+"/v1/playground/chat?"+url.Values{"key_id": {keyID}}.Encode(),
 		bytes.NewReader(body))
 	if err != nil {
@@ -319,13 +294,10 @@ func (c *Client) Chat(ctx context.Context, token, keyID string, body []byte) (*h
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
-	// Set explicitly, so nothing between here and the model gzips the
-	// stream and holds tokens back in a buffer.
+	// Stop proxies from gzipping the stream and buffering tokens.
 	req.Header.Set("Accept-Encoding", "identity")
 	res, err := c.send(req, token)
-	// A 401 that is not about the sign-in is the model server's, such as for
-	// the credentials the gateway holds for it. Its words are for whoever
-	// runs Keera.
+	// Any other 401 is from the model server. Its message is for admins.
 	if e, ok := errors.AsType[*Error](err); ok && e.Status == http.StatusUnauthorized &&
 		e.Code != unauthenticated && !e.plain {
 		e.reword()
@@ -369,14 +341,13 @@ func (c *Client) call(ctx context.Context, method, path, token string, in, out a
 	return nil
 }
 
-// send makes req with the person's token, if there is one, and turns a
-// refusal into an *Error. The caller closes the body of the response.
+// send makes req with token, if any, and turns a refusal into an *Error.
+// The caller closes the response body.
 func (c *Client) send(req *http.Request, token string) (*http.Response, error) {
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	// The gateway reads X-Keera-Client first, and User-Agent where that is
-	// not set.
+	// The gateway falls back to User-Agent without X-Keera-Client.
 	req.Header.Set("X-Keera-Client", ClientName)
 	req.Header.Set("User-Agent", ClientName)
 	res, err := c.http.Do(req)
@@ -390,8 +361,8 @@ func (c *Client) send(req *http.Request, token string) (*http.Response, error) {
 	return res, nil
 }
 
-// readError reads the gateway's error envelope, {"error": {"message", ...}}.
-// Anything else, such as a proxy's HTML page, keeps only the status.
+// readError reads {"error": {"message", "code"}}. Anything else, such as a
+// proxy's HTML page, keeps only the status.
 func readError(res *http.Response) error {
 	var env struct {
 		Error struct {
@@ -403,8 +374,7 @@ func readError(res *http.Response) error {
 	return NewError(res.StatusCode, env.Error.Code, env.Error.Message)
 }
 
-// unreachable keeps a cancelled call recognisable as one, and words every
-// other failure, a timeout included, for a person.
+// unreachable keeps cancellation as is and turns other failures into NoAnswer.
 func unreachable(err error) error {
 	if errors.Is(err, context.Canceled) {
 		return err

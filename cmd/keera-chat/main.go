@@ -1,5 +1,5 @@
-// Command keera-chat is the chat for the people behind a Keera Gateway: a
-// conversation in the browser, signed in and sent through the gateway.
+// Command keera-chat is a browser chat that signs in and sends messages
+// through Keera Gateway.
 package main
 
 import (

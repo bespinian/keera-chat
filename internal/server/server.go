@@ -1,5 +1,4 @@
-// Package server wires Keera Chat together and runs it until it is told to
-// stop.
+// Package server wires Keera Chat together and runs it.
 package server
 
 import (
@@ -38,7 +37,7 @@ func Run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Not fatal: chat may well start before the gateway does.
+	// Not fatal: chat may start before the gateway.
 	check, cancel := context.WithTimeout(ctx, 5*time.Second)
 	if _, err := gw.AuthConfig(check); err != nil {
 		log.Warn("Keera Gateway does not answer yet; sign-ins will fail until it does",
@@ -57,9 +56,9 @@ func Run() error {
 		Addr:              cfg.Addr,
 		Handler:           app.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
-		// Generous enough for a message with images on a slow line.
+		// Enough for a message with images on a slow line.
 		ReadTimeout: 2 * time.Minute,
-		// For the small answers. A streamed reply lifts it for itself.
+		// Streamed replies lift this themselves.
 		WriteTimeout: time.Minute,
 		IdleTimeout:  2 * time.Minute,
 	}
@@ -82,7 +81,7 @@ func Run() error {
 	}
 
 	log.Info("shutting down")
-	// Replies still streaming get a little while to finish.
+	// Give streaming replies time to finish.
 	shutdown, cancelShutdown := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancelShutdown()
 	if err := srv.Shutdown(shutdown); err != nil && !errors.Is(err, context.DeadlineExceeded) {
@@ -93,7 +92,7 @@ func Run() error {
 
 func newLogger(cfg config.Config) *slog.Logger {
 	var level slog.Level
-	// config.Load has already refused anything else.
+	// config.Load already validated it.
 	_ = level.UnmarshalText([]byte(cfg.LogLevel))
 	opts := &slog.HandlerOptions{Level: level}
 	if cfg.LogFormat == "json" {

@@ -16,30 +16,23 @@ import (
 )
 
 // pingEvery keeps a quiet stream alive through proxies that close idle
-// connections, while a model thinks before its first token.
+// connections.
 const pingEvery = 15 * time.Second
 
 type replyIn struct {
 	Model string `json:"model"`
-	// ModelName is the model as the page names it, for errors.
+	// ModelName is the display name, for errors.
 	ModelName string `json:"model_name"`
 	KeyID     string `json:"key_id"`
-	// Instructions are the person's custom instructions, sent ahead of the
-	// conversation like a system prompt. The gateway may add its own before.
+	// Instructions are sent as the system prompt.
 	Instructions string `json:"instructions"`
-	// Messages is the whole conversation, ending with the person's message
-	// to answer.
+	// Messages is the whole conversation, ending with the message to answer.
 	Messages []turn `json:"messages"`
 }
 
-// reply has the model answer a conversation through the gateway and streams
-// the answer back. Chat keeps nothing: the page sends the whole conversation
-// with each message, and keeps the reply.
-//
-// The page reads server-sent events: "delta" for each piece of the answer,
-// then "done" with the whole reply. A refusal by the gateway, such as a spent
-// budget, arrives as a "done" whose reply has an error, and the page keeps it
-// with the conversation like any reply.
+// reply streams the model's answer as server-sent events: "delta" for each
+// piece, then "done" with the whole reply. A gateway refusal, such as a spent
+// budget, is a "done" with an error. Chat stores nothing.
 func (s *Server) reply(w http.ResponseWriter, r *http.Request, c *caller) {
 	var in replyIn
 	if !s.readJSON(w, r, &in) {
@@ -53,8 +46,7 @@ func (s *Server) reply(w http.ResponseWriter, r *http.Request, c *caller) {
 		"model":    in.Model,
 		"messages": wire(strings.TrimSpace(in.Instructions), in.Messages),
 		"stream":   true,
-		// The gateway passes the model server's count on only when asked,
-		// and the page shows from it how full the context is.
+		// Token usage, so the page can show how full the context is.
 		"stream_options": map[string]bool{"include_usage": true},
 	})
 	if err != nil {
@@ -89,15 +81,19 @@ func (s *Server) reply(w http.ResponseWriter, r *http.Request, c *caller) {
 	out.send("done", reply)
 }
 
-// check says why a conversation cannot be sent, or is empty when it can.
+// check returns why a conversation cannot be sent, or "".
 func check(in replyIn) string {
 	if in.Model == "" || in.KeyID == "" {
 		return "choose a model to send to"
 	}
-	if len(in.Messages) == 0 || in.Messages[len(in.Messages)-1].Role != "user" {
+	var last turn
+	if n := len(in.Messages); n > 0 {
+		last = in.Messages[n-1]
+	}
+	if last.Role != "user" {
 		return "there is no message to answer"
 	}
-	if last := in.Messages[len(in.Messages)-1]; strings.TrimSpace(last.Content) == "" && len(last.Images) == 0 && len(last.Files) == 0 {
+	if strings.TrimSpace(last.Content) == "" && len(last.Images) == 0 && len(last.Files) == 0 {
 		return "write a message first"
 	}
 	for _, m := range in.Messages {
@@ -124,7 +120,6 @@ func check(in replyIn) string {
 	return ""
 }
 
-// finish takes inline thinking out of a finished reply.
 func finish(content, reasoning string) (string, string) {
 	answer, thought := splitThink(content)
 	if thought != "" {
@@ -150,7 +145,7 @@ type chunk struct {
 		Message string       `json:"message"`
 		Code    gateway.Code `json:"code"`
 	} `json:"error"`
-	// Usage comes last in a stream, in a chunk of its own with no choices.
+	// Usage comes last, in a chunk with no choices.
 	Usage *struct {
 		PromptTokens     int `json:"prompt_tokens"`
 		CompletionTokens int `json:"completion_tokens"`
@@ -159,22 +154,20 @@ type chunk struct {
 
 type delta struct {
 	Content string `json:"content"`
-	// Newer vLLM servers name it "reasoning", older ones and llama.cpp
+	// Newer vLLM uses "reasoning"; older vLLM and llama.cpp use
 	// "reasoning_content".
 	Reasoning        string `json:"reasoning"`
 	ReasoningContent string `json:"reasoning_content"`
 }
 
-// stream copies the model's answer to the page as it arrives and gathers it
-// into reply. When the person stops the reply, the request's context ends,
-// which also ends the request to the gateway, and so the model's work.
+// stream forwards the answer to the page and gathers it into reply. Stopping
+// cancels ctx, which also ends the request to the gateway.
 func (s *Server) stream(ctx context.Context, res *http.Response, out *events, reply *Message, model string) {
 	defer func() { _ = res.Body.Close() }()
 
 	var text, thought strings.Builder
 	apply := func(c chunk) {
-		// The gateway passes a model's stream on as it came, so an error
-		// in it is the model server's.
+		// An error in the stream comes from the model server.
 		if c.Error != nil && c.Error.Message != "" {
 			e := gateway.NewError(0, c.Error.Code, c.Error.Message).Naming(model)
 			reply.Error, reply.ErrorDetail = e.Message, e.Detail
@@ -233,8 +226,7 @@ func (s *Server) stream(ctx context.Context, res *http.Response, out *events, re
 		select {
 		case c, ok := <-chunks:
 			if !ok {
-				// readErr is set before the channel closes, so reading it is
-				// safe here.
+				// readErr is set before the channel closes.
 				switch {
 				case ctx.Err() != nil:
 					reply.Stopped = true
@@ -251,8 +243,8 @@ func (s *Server) stream(ctx context.Context, res *http.Response, out *events, re
 	}
 }
 
-// readEvents calls each for every JSON event of a server-sent event stream
-// until the stream says [DONE], ends, or each returns false.
+// readEvents calls each for every JSON event until [DONE], the end, or each
+// returns false.
 func readEvents(body io.Reader, each func(chunk) bool) error {
 	br := bufio.NewReaderSize(body, 64<<10)
 	for {
@@ -263,7 +255,7 @@ func readEvents(body io.Reader, each func(chunk) bool) error {
 				return nil
 			}
 			var c chunk
-			// A chunk that is not JSON is skipped; the stream carries on.
+			// Skip chunks that are not JSON.
 			if data != "" && json.Unmarshal([]byte(data), &c) == nil && !each(c) {
 				return nil
 			}
@@ -277,7 +269,7 @@ func readEvents(body io.Reader, each func(chunk) bool) error {
 	}
 }
 
-// events writes server-sent events to the page, each flushed at once.
+// events writes server-sent events, each flushed at once.
 type events struct {
 	w  http.ResponseWriter
 	rc *http.ResponseController
@@ -285,22 +277,19 @@ type events struct {
 
 func newEvents(w http.ResponseWriter) *events {
 	rc := http.NewResponseController(w)
-	// The listener's write timeout is for small answers. A reply can take
-	// minutes, so it is lifted for this response only.
+	// A reply can take minutes, longer than the listener's write timeout.
 	_ = rc.SetWriteDeadline(time.Time{})
 	h := w.Header()
 	h.Set("Content-Type", "text/event-stream")
 	h.Set("Cache-Control", "no-store")
-	// nginx buffers responses unless told not to, which would hold the
-	// tokens back until the reply is complete.
+	// Stop nginx from buffering the stream.
 	h.Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 	_ = rc.Flush()
 	return &events{w: w, rc: rc}
 }
 
-// send writes one event. A page that has gone away is not an error here: its
-// request's context ends, and with it the reply.
+// send ignores write errors. If the page is gone, its context ends the reply.
 func (e *events) send(event string, v any) {
 	data, err := json.Marshal(v)
 	if err != nil {

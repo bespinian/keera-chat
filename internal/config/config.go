@@ -12,42 +12,37 @@ import (
 	"strings"
 )
 
-// Config is the whole of Keera Chat's configuration.
+// Config is Keera Chat's configuration.
 type Config struct {
-	// Addr is the one listener: the chat at /, its API under /api and the
-	// sign-in under /auth.
+	// Addr serves the page at /, the API at /api and sign-in at /auth.
 	Addr string
 
-	// PublicURL is this service's origin as a browser sees it. The gateway
-	// sends the browser back to PublicURL + "/auth/callback" after a sign-in,
-	// so it must match what the gateway was told in KEERA_CHAT_URL.
+	// PublicURL is chat's origin as a browser sees it. It must match the
+	// gateway's KEERA_CHAT_URL, since sign-in returns to /auth/callback.
 	PublicURL string
 
-	// GatewayURL is Keera Gateway's origin as a browser sees it. The sign-in
-	// starts there, and the account menu links to its panel.
+	// GatewayURL is the gateway's origin as a browser sees it.
 	GatewayURL string
-	// GatewayInternalURL is where this service itself reaches the gateway,
-	// for a deployment where that differs, such as a compose network. It
-	// defaults to GatewayURL.
+	// GatewayInternalURL is how chat reaches the gateway, such as on a
+	// compose network. Defaults to GatewayURL.
 	GatewayInternalURL string
 
 	// SecretKey seals chat's cookies. Changing it signs everyone out.
 	SecretKey string
 
-	// SecureCookies marks chat's cookies Secure. On by default when the
-	// public URL is https; off lets a plain-http setup on localhost sign in.
+	// SecureCookies defaults to on for an https PublicURL. Off allows plain
+	// http on localhost.
 	SecureCookies bool
 
-	// MaxBodyBytes bounds one request to the chat API. Each message brings
-	// its whole conversation, images inline, so it is far above what text
-	// needs.
+	// MaxBodyBytes limits one API request. It is large because each message
+	// carries the whole conversation, images included.
 	MaxBodyBytes int64
 
 	LogLevel  string
 	LogFormat string
 }
 
-// Load reads the configuration from the process environment.
+// Load reads the configuration from the environment.
 func Load() (Config, error) { return load(os.Getenv) }
 
 func load(getenv func(string) string) (Config, error) {
@@ -57,6 +52,7 @@ func load(getenv func(string) string) (Config, error) {
 		}
 		return def
 	}
+	originEnv := func(key, def string) (string, error) { return origin(key, env(key, def)) }
 
 	c := Config{
 		Addr:      env("KEERA_CHAT_ADDR", ":8090"),
@@ -66,26 +62,24 @@ func load(getenv func(string) string) (Config, error) {
 	}
 
 	var err error
-	if c.GatewayURL, err = origin("KEERA_CHAT_GATEWAY_URL", env("KEERA_CHAT_GATEWAY_URL", "")); err != nil {
+	if c.GatewayURL, err = originEnv("KEERA_CHAT_GATEWAY_URL", ""); err != nil {
 		return c, err
 	}
 	if c.GatewayURL == "" {
 		return c, errors.New("KEERA_CHAT_GATEWAY_URL is required: the address a browser " +
 			"reaches Keera Gateway on, such as https://keera.example.ch")
 	}
-	if c.GatewayInternalURL, err = origin("KEERA_CHAT_GATEWAY_INTERNAL_URL",
-		env("KEERA_CHAT_GATEWAY_INTERNAL_URL", c.GatewayURL)); err != nil {
+	if c.GatewayInternalURL, err = originEnv("KEERA_CHAT_GATEWAY_INTERNAL_URL", c.GatewayURL); err != nil {
 		return c, err
 	}
 
-	// Without a public URL, assume a browser on this machine. The gateway
-	// accepts a sign-in that comes back to a loopback address without being
-	// told about it, so this works out of the box for development.
+	// Default to loopback. The gateway allows it without setup, which suits
+	// development.
 	def := ""
 	if _, port, err := net.SplitHostPort(c.Addr); err == nil && port != "" {
 		def = "http://127.0.0.1:" + port
 	}
-	if c.PublicURL, err = origin("KEERA_CHAT_PUBLIC_URL", env("KEERA_CHAT_PUBLIC_URL", def)); err != nil {
+	if c.PublicURL, err = originEnv("KEERA_CHAT_PUBLIC_URL", def); err != nil {
 		return c, err
 	}
 	if c.PublicURL == "" {
@@ -124,9 +118,8 @@ func load(getenv func(string) string) (Config, error) {
 	return c, nil
 }
 
-// origin checks that raw is a bare http or https origin and returns it
-// without a trailing slash. Paths are refused: the chat and the gateway are
-// each reached at the root of their host.
+// origin returns raw as a bare http(s) origin. Paths are refused: chat and
+// the gateway each run at the root of their host.
 func origin(name, raw string) (string, error) {
 	if raw == "" {
 		return "", nil

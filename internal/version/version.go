@@ -3,13 +3,12 @@ package version
 
 import "runtime/debug"
 
-// release is set at link time by a release build:
+// release is set at link time:
 //
 //	go build -ldflags "-X github.com/bespinian/keera-chat/internal/version.release=v0.1.0"
 var release string
 
-// String is the release, or "devel" with the commit when built from a
-// checkout.
+// String returns the release, or "devel" with the commit.
 func String() string {
 	if release != "" {
 		return release

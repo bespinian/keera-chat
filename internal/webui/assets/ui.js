@@ -1,16 +1,21 @@
-// Small DOM helpers, the same ones the gateway's panel is built with. Every
-// node is made from text, so nothing a model or a person writes is ever
-// parsed as markup.
+// Small DOM helpers, shared with the gateway's panel. Children become text
+// nodes, so user or model text is never parsed as markup.
 
 export function h(tag, props, ...children) {
-  const el = document.createElement(tag);
+  return build(document.createElement(tag), props, children);
+}
+
+/** svg is h() for SVG elements. */
+export function svg(tag, props, ...children) {
+  return build(document.createElementNS("http://www.w3.org/2000/svg", tag), props, children);
+}
+
+function build(el, props, children) {
   for (const [k, v] of Object.entries(props || {})) {
     if (v === null || v === undefined || v === false) continue;
-    if (k === "class") el.className = v;
-    else if (k === "style" && typeof v === "object") Object.assign(el.style, v);
+    if (k === "style" && typeof v === "object") Object.assign(el.style, v);
     else if (k.startsWith("on")) el.addEventListener(k.slice(2).toLowerCase(), v);
-    else if (v === true) el.setAttribute(k, "");
-    else el.setAttribute(k, v);
+    else el.setAttribute(k, v === true ? "" : v);
   }
   append(el, children);
   return el;
@@ -23,21 +28,8 @@ function append(el, children) {
   }
 }
 
-/** svg is h() for SVG elements, which need their namespace. */
-export function svg(tag, props, ...children) {
-  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
-  for (const [k, v] of Object.entries(props || {})) {
-    if (v === null || v === undefined || v === false) continue;
-    el.setAttribute(k, v);
-  }
-  append(el, children);
-  return el;
-}
-
-/** idpMarks are the identity providers' logos, as the gateway's panel has
- *  them, keyed by the names an operator picks in the gateway's
- *  KEERA_OIDC_PROVIDERS. idpAliases lets the obvious spellings of each vendor
- *  share the artwork. */
+/** idpMarks are identity provider logos, keyed by the names in the gateway's
+ *  KEERA_OIDC_PROVIDERS. idpAliases maps other common spellings. */
 const idpMarks = {
   google: {
     viewBox: "0 0 24 24",
@@ -63,7 +55,7 @@ const idpAliases = {
   m365: "microsoft",
 };
 
-/** idpMark is an identity provider's logo, or null for one with no mark. */
+/** idpMark returns a provider's logo, or null. */
 export function idpMark(name) {
   const key = String(name || "").toLowerCase();
   const mark = idpMarks[idpAliases[key] || key];
@@ -100,7 +92,7 @@ export function icon(path) {
 }
 
 export const icons = {
-  // A pen on a page, so it is not mistaken for editing a message.
+  // Pen on a page, unlike pencil, which edits a message.
   newChat: "M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.4 2.6a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z",
   send: "M12 19V5M5 12l7-7 7 7",
   stop: "M7 7h10v10H7z",
@@ -137,19 +129,12 @@ export const icons = {
     "M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z",
 };
 
-/** iconButton is a square, quiet button that says what it does to a screen
- *  reader and on hover. */
-export function iconButton(path, label, onClick, extra = {}) {
+/** iconButton is an icon-only button, labelled for screen readers and hover.
+ *  Other props go to the button. */
+export function iconButton(path, label, onClick, { class: cls = "", ...props } = {}) {
   return h(
     "button",
-    {
-      type: "button",
-      class: "icon-btn " + (extra.class || ""),
-      title: label,
-      "aria-label": label,
-      onClick,
-      ...(extra.attrs || {}),
-    },
+    { type: "button", class: "icon-btn " + cls, title: label, "aria-label": label, onClick, ...props },
     icon(path),
   );
 }
@@ -160,11 +145,9 @@ let toastHost = null;
 
 export function toast(message, tone = "") {
   if (!toastHost) {
-    // A live region, so screen readers announce toasts.
     toastHost = h("div", {
       class: "toasts",
       role: "status",
-      "aria-live": "polite",
     });
     document.body.append(toastHost);
   }
@@ -179,8 +162,7 @@ export async function copyText(text, what = "Copied") {
     toast(what, "good");
     return true;
   } catch {
-    // Clipboard access needs a secure context, which a plain-http setup on
-    // another machine is not.
+    // The clipboard needs a secure context, which plain http is not.
     toast("This browser did not allow copying here. Select the text instead.", "bad");
     return false;
   }
@@ -188,9 +170,8 @@ export async function copyText(text, what = "Copied") {
 
 /* ----------------------------------------------------------------- modal */
 
-/** showOverlay puts node over the page and returns the function that takes it
- *  away again, which Escape calls too. Closing gives focus back to where it
- *  was and passes its value on to onClose. */
+/** showOverlay shows node and returns a close function, also bound to
+ *  Escape. Closing restores focus and passes its value to onClose. */
 function showOverlay(node, onClose = () => {}) {
   const previous = document.activeElement;
   const onKey = (e) => {
@@ -210,8 +191,8 @@ function showOverlay(node, onClose = () => {}) {
   return close;
 }
 
-/** modal shows a dialog and resolves with what onSubmit returns, or null when
- *  it is dismissed. onSubmit may throw to keep the dialog open. */
+/** modal resolves with what onSubmit returns, or null if dismissed.
+ *  onSubmit may throw to keep the dialog open. */
 export function modal({ title, body, submit = "Save", danger = false, onSubmit }) {
   return new Promise((resolve) => {
     const error = h("div", { class: "banner banner-bad", hidden: true });
@@ -264,14 +245,12 @@ export function modal({ title, body, submit = "Save", danger = false, onSubmit }
   });
 }
 
-/** confirmDialog asks before something that cannot be undone. */
 export function confirmDialog(title, text, submit) {
   return modal({ title, body: h("p", { class: "modal-text" }, text), submit, danger: true });
 }
 
-/** viewImage shows images as large as the window allows, from the one at
- *  index. Arrows and the arrow keys flip through several, such as the pages
- *  of a PDF. A click anywhere else or Escape closes it. */
+/** viewImage shows images full size, starting at index. Arrow keys flip
+ *  through them, such as PDF pages. A click or Escape closes it. */
 function viewImage(srcs, index, alt = "") {
   const img = h("img", { alt });
   const count = h("div", { class: "viewer-count", "aria-live": "polite" });
@@ -312,8 +291,7 @@ function viewImage(srcs, index, alt = "") {
   closeBtn.focus();
 }
 
-/** imageButton is a preview that opens the image in full when clicked. The
- *  viewer flips through gallery, the image's place in it being at. */
+/** imageButton is a preview that opens the viewer on gallery at index at. */
 export function imageButton(src, alt = "", { gallery = [src], at = 0 } = {}) {
   return h(
     "button",
@@ -334,9 +312,8 @@ let openMenu = null;
 
 /** menu opens a list of actions next to anchor. Each item is
  *  { label, icon, onClick, href, danger, checked, hint }, { separator: true },
- *  { heading }, or a node, which is shown as it is. An item with href opens
- *  it in a new tab. It closes on a click outside, on Escape, after an action,
- *  and on a second click on its anchor. */
+ *  { heading }, or a node. href opens in a new tab. A second click on the
+ *  anchor closes it. */
 export function menu(anchor, items, { up = false, wide = false } = {}) {
   if (openMenu && anchor.getAttribute("aria-expanded") === "true") {
     closeMenu();
@@ -348,7 +325,6 @@ export function menu(anchor, items, { up = false, wide = false } = {}) {
     role: "menu",
   });
   for (const item of items) {
-    if (!item) continue;
     if (item instanceof Node) {
       list.append(item);
       continue;
@@ -366,7 +342,7 @@ export function menu(anchor, items, { up = false, wide = false } = {}) {
         item.href ? "a" : "button",
         {
           class: "menu-item" + (item.danger ? " menu-danger" : ""),
-          role: "menuitem",
+          role: item.checked === undefined ? "menuitem" : "menuitemradio",
           type: item.href ? null : "button",
           href: item.href || null,
           target: item.href ? "_blank" : null,
@@ -430,7 +406,7 @@ export function closeMenu() {
   }
 }
 
-/** place puts a floating element beside its anchor, kept on screen. */
+/** place puts el beside its anchor, kept on screen. */
 function place(el, anchor, up) {
   const a = anchor.getBoundingClientRect();
   const m = el.getBoundingClientRect();
@@ -445,23 +421,31 @@ function place(el, anchor, up) {
 
 /* ------------------------------------------------------------ formatting */
 
-/** money renders integer micro-francs, as the gateway reports spend. */
+/** money formats the gateway's micro-francs. */
 export function money(micros) {
   const v = (micros || 0) / 1e6;
   const s = v === 0 ? "0.00" : Math.abs(v) >= 1 ? v.toFixed(2) : v.toPrecision(2);
   return `CHF ${s}`;
 }
 
-/** sentence makes a sentence of a lower-case message from the server or the
- *  gateway: a capital first and a full stop last. */
+/** count puts n before noun, plural unless n is 1. */
+export function count(n, noun) {
+  return `${n} ${noun}${n === 1 ? "" : "s"}`;
+}
+
+/** setTitle names the tab after the page. */
+export function setTitle(title) {
+  document.title = title ? `${title} · Keera Chat` : "Keera Chat";
+}
+
+/** sentence capitalizes s and ends it with a full stop. */
 export function sentence(s) {
   if (!s) return s;
   s = s[0].toUpperCase() + s.slice(1);
   return /[.!?…]$/.test(s) ? s : s + ".";
 }
 
-/** oneLine collapses all whitespace to single spaces and cuts the result to
- *  at most max characters, at a word where it can. */
+/** oneLine collapses whitespace and cuts to max characters, at a word if it can. */
 export function oneLine(s, max) {
   s = s.trim().split(/\s+/).join(" ");
   const chars = [...s];
@@ -479,7 +463,6 @@ export function day(iso) {
   });
 }
 
-/** initials of a name or an address, for the avatar. */
 export function initials(name, email) {
   const words = (name || "").trim().split(/\s+/).filter(Boolean);
   if (words.length >= 2) return (words[0][0] + words[words.length - 1][0]).toUpperCase();
@@ -499,8 +482,8 @@ export function setTheme(t) {
   remember("theme", t === "system" ? "" : t);
 }
 
-/** remembered and remember keep small per-browser choices, such as the last
- *  model. Storage may be refused, so both fail quietly. */
+/** remembered and remember keep small per-browser choices. Storage may be
+ *  blocked, so both fail quietly. */
 export function remembered(key) {
   try {
     return localStorage.getItem("keera.chat." + key) || "";

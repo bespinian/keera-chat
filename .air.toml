@@ -1,36 +1,29 @@
-# Live reload for Keera Chat during development: `make dev`.
-#
-# Chat runs on the host and talks to a gateway that is already running, such
-# as the gateway's own `make dev`. A save rebuilds and restarts it in about a
-# second.
+# Live reload for `make dev`. Needs a running gateway.
 
 root = "."
-# Under build/, like every other build output.
 tmp_dir = "build/air"
-# Empty on purpose: the dev target sets up the environment, so it is described
-# in one place.
+# Empty: `make dev` sets the environment.
 env_files = []
 
 [build]
   cmd = "go build -trimpath -o ./build/air/keera-chat ./cmd/keera-chat"
   entrypoint = ["./build/air/keera-chat"]
 
-  # The page is embedded with go:embed, so editing it needs a Go rebuild too.
+  # The web UI is embedded, so its files need a rebuild too.
   include_ext = ["go", "js", "css", "html", "svg", "png", "woff2"]
 
   exclude_dir = ["build", ".git"]
   exclude_regex = ["_test\\.go"]
 
-  # SIGINT lets the binary release :8090. Killing it outright makes the next
-  # build fail with "address already in use".
+  # SIGINT frees :8090. A hard kill causes "address already in use".
   send_interrupt = true
   kill_delay = "2s"
 
-  # A build failure stops chat instead of leaving stale code serving.
+  # Don't keep serving stale code after a failed build.
   stop_on_error = true
 
   delay = 200
-  # Written inside tmp_dir, not at the root.
+  # Inside tmp_dir.
   log = "build-errors.log"
 
 [misc]

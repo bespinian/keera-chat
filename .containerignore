@@ -1,5 +1,4 @@
-# The build context is the repository root, so everything large or private has
-# to be named here, or it is shipped to the builder.
+# Keep large or private files out of the build context.
 .git
 .claude
 /build

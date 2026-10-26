@@ -1,10 +1,8 @@
-// Package gatewaytest is a stand-in Keera Gateway: the routes chat calls,
-// with one person in two organisations, a few keys and models that answer
-// from a script. The tests drive chat against it.
+// Package gatewaytest is a fake Keera Gateway for tests: one person in two
+// organisations, a few keys, and scripted models.
 //
-// It checks what the real gateway checks where chat could get it wrong: the
-// PKCE verifier, the bearer token and the key id. It records the client name,
-// so a test can check that too.
+// It checks the PKCE verifier, bearer token and key id, and records the
+// client name.
 package gatewaytest
 
 import (
@@ -27,7 +25,7 @@ const (
 )
 
 type Gateway struct {
-	// Delay is the pause between streamed words, so a reply takes a while.
+	// Delay is the pause between streamed words.
 	Delay time.Duration
 
 	mu         sync.Mutex
@@ -44,7 +42,7 @@ func New() *Gateway {
 	return &Gateway{codes: map[string]string{}, tokens: map[string]bool{}, orgID: OrgID}
 }
 
-// LastChat is the body of the last chat request, as the model would get it.
+// LastChat is the body of the last chat request.
 func (g *Gateway) LastChat() map[string]any {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -65,15 +63,14 @@ func (g *Gateway) Chats() int {
 	return g.chats
 }
 
-// Streaming counts the replies the model is still writing, so a test can see
-// that stopping a reply ends the model's work.
+// Streaming counts replies still being written, to check that stopping works.
 func (g *Gateway) Streaming() int {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.streaming
 }
 
-// Revoke ends every sign-in, as signing out everywhere would.
+// Revoke ends every sign-in.
 func (g *Gateway) Revoke() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -111,32 +108,36 @@ func (g *Gateway) Handler() http.Handler {
 	mux.HandleFunc("GET /control/v1/access", g.authed(g.access))
 	mux.HandleFunc("GET /control/v1/models", g.authed(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"data": []map[string]any{
-			{"alias": "keera-speed", "kind": "chat", "enabled": true, "display_name": "Keera Speed",
-				"description": "Quick answers for everyday questions", "max_context_tokens": 131072},
-			{"alias": "keera-think", "kind": "chat", "enabled": true, "display_name": "Keera Think",
-				"description": "Thinks first, for harder questions", "max_context_tokens": 262144},
+			{
+				"alias": "keera-speed", "kind": "chat", "enabled": true, "display_name": "Keera Speed",
+				"description": "Quick answers for everyday questions", "max_context_tokens": 131072,
+			},
+			{
+				"alias": "keera-think", "kind": "chat", "enabled": true, "display_name": "Keera Think",
+				"description": "Thinks first, for harder questions", "max_context_tokens": 262144,
+			},
 			{"alias": "keera-embed", "kind": "embedding", "enabled": true},
 			{"alias": "claude-plan", "kind": "chat", "enabled": true, "subscription": true},
 		}})
 	}))
 	mux.HandleFunc("GET /control/v1/routers", g.authed(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"data": []map[string]any{
-			{"alias": "keera-auto", "display_name": "Keera Auto",
-				"description": "Picks Speed or Think for each message"},
+			{
+				"alias": "keera-auto", "display_name": "Keera Auto",
+				"description": "Picks Speed or Think for each message",
+			},
 		}})
 	}))
 	mux.HandleFunc("POST /control/v1/playground/chat", g.authed(g.chat))
 	return mux
 }
 
-// login stands in for the whole sign-in at an identity provider: it sends the
-// browser straight back with a code, as the gateway does once the person has
-// signed in.
+// login skips the identity provider and redirects straight back with a code.
 func (g *Gateway) login(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	back, err := url.Parse(q.Get("cli_redirect"))
 	if err != nil || back.Host == "" || q.Get("cli_challenge") == "" || q.Get("cli_state") == "" {
-		http.Error(w, "a sign-in needs cli_redirect, cli_challenge and cli_state", 400)
+		http.Error(w, "a sign-in needs cli_redirect, cli_challenge and cli_state", http.StatusBadRequest)
 		return
 	}
 	code := rand.Text()
@@ -200,35 +201,36 @@ func (g *Gateway) access(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	resets := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.UTC)
 	writeJSON(w, 200, map[string]any{"keys": []map[string]any{
-		{"id": KeyID, "org_id": OrgID, "name": "Laptop", "prefix": "kg_ab12", "kind": "standard",
+		{
+			"id": KeyID, "org_id": OrgID, "name": "Laptop", "prefix": "kg_ab12", "kind": "standard",
 			"state": "active", "project_name": "Research",
 			"allowed_models": []string{"keera-speed", "keera-think", "keera-auto", "keera-embed"},
 			"scopes": []map[string]any{
-				{"type": "org", "name": "Example AG", "budget_micros": 1_000_000_000,
-					"spend_micros": 120_000_000, "period": "month", "resets_at": resets},
-				{"type": "project", "name": "Research", "budget_micros": 50_000_000,
-					"spend_micros": 12_340_000, "period": "month", "resets_at": resets},
-			}},
+				{
+					"type": "org", "name": "Example AG", "budget_micros": 1_000_000_000,
+					"spend_micros": 120_000_000, "period": "month", "resets_at": resets,
+				},
+				{
+					"type": "project", "name": "Research", "budget_micros": 50_000_000,
+					"spend_micros": 12_340_000, "period": "month", "resets_at": resets,
+				},
+			},
+		},
 		{"id": "key_pending", "org_id": OrgID, "name": "Phone", "kind": "standard", "state": "pending"},
 		{"id": "key_sub", "org_id": OrgID, "name": "Claude", "kind": "subscription", "state": "active"},
 	}})
 }
 
-// chat answers from a script, chosen by what the last message says:
+// chat replies based on the last message:
 //
-//   - "budget" is refused as a spent budget would be,
-//   - "too long" is refused as too long for the model's context, in the
-//     gateway's words for agents,
-//   - "overloaded" is refused by the model server, in vLLM's words, which
-//     the gateway passes on,
-//   - "credentials" is refused by the model server for the credentials the
-//     gateway holds for it, in OpenAI's words, which the gateway passes on
-//     with the model server's 401,
-//   - "broken" fails partway through the reply, as a model server can,
-//   - "slow" streams for a long time, to be stopped,
-//   - anything else gets a reply that shows off the formatting, with the
-//     message quoted back, and keera-think thinks first. Its usage comes
-//     last when the request asks for it, as the gateway sends it.
+//   - "budget": refused for a spent budget
+//   - "too long": refused for exceeding the context
+//   - "overloaded": a vLLM error, passed on
+//   - "credentials": a model server 401, in OpenAI's words
+//   - "broken": fails mid-reply
+//   - "slow": streams for a long time, to be stopped
+//   - anything else: a formatted reply quoting the message. keera-think
+//     thinks first. Usage comes last when requested.
 func (g *Gateway) chat(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("key_id") != KeyID {
 		writeError(w, 404, "not_found", "not found")
@@ -285,7 +287,7 @@ func (g *Gateway) chat(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	w.Header().Set("Content-Type", "text/event-stream")
-	w.WriteHeader(200)
+	w.WriteHeader(http.StatusOK)
 	flush := func() { _ = http.NewResponseController(w).Flush() }
 	send := func(delta map[string]any, finish any) bool {
 		chunk := map[string]any{"choices": []map[string]any{{"index": 0, "delta": delta, "finish_reason": finish}}}
@@ -340,8 +342,10 @@ func (g *Gateway) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	send(map[string]any{}, "stop")
 	if opts, _ := body["stream_options"].(map[string]any); opts["include_usage"] == true {
-		b, _ := json.Marshal(map[string]any{"choices": []any{},
-			"usage": map[string]int{"prompt_tokens": 42 * len(body["messages"].([]any)), "completion_tokens": 128}})
+		b, _ := json.Marshal(map[string]any{
+			"choices": []any{},
+			"usage":   map[string]int{"prompt_tokens": 42 * len(body["messages"].([]any)), "completion_tokens": 128},
+		})
 		_, _ = fmt.Fprintf(w, "data: %s\n\n", b)
 	}
 	_, _ = fmt.Fprint(w, "data: [DONE]\n\n")

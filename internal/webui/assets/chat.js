@@ -1,31 +1,35 @@
 // One conversation: the thread and the composer.
 //
-// A reply keeps streaming when the person goes to another conversation. Its
-// state lives in app.live, keyed by conversation, and whichever view shows
-// that conversation paints it, so coming back shows the reply still arriving.
+// A reply keeps streaming when the person leaves. Its state lives in
+// app.live, and whichever view shows that conversation paints it.
 
 import { api, ApiError } from "./api.js";
 import { render as markdown } from "./markdown.js";
-import { exclusive, newID, summary } from "./store.js";
-import { h, icon, icons, iconButton, imageButton, replace, toast, copyText, sentence, oneLine, svg } from "./ui.js";
+import { exclusive, newID, summary, imageTypes, maxImages, maxFiles, maxFileBytes } from "./store.js";
+import {
+  h,
+  icon,
+  icons,
+  iconButton,
+  imageButton,
+  replace,
+  toast,
+  copyText,
+  sentence,
+  oneLine,
+  count,
+  setTitle,
+  svg,
+} from "./ui.js";
 
-// The formats every API that reads images accepts. The server checks the same
-// list, and maxImages, in internal/chat/turns.go, and store.js checks
-// imported files against both.
-const imageTypes = "image/png,image/jpeg,image/gif,image/webp";
-// Providers scale larger images down to about this anyway, and every image is
-// sent again with each later message.
+// Providers scale larger images down anyway, and each image is resent with
+// every later message.
 const maxImageSide = 2048;
-const maxImages = 10;
-// Text files go to the model as text. The server checks the same limits.
-const maxFiles = 10;
-const maxFileBytes = 512 << 10;
 
 const cutOff = "The reply was cut off before it finished. Try again.";
 
 export function chatView(app, id) {
-  // view is what app.js holds of this conversation. pending is a reply to a
-  // new chat, which has no id yet, and gone says the view was left.
+  // pending is a reply to a new chat with no id yet.
   const view = {
     id,
     el: null,
@@ -35,11 +39,14 @@ export function chatView(app, id) {
     focus: () => input.focus(),
     destroy,
     pending: null,
-    gone: false,
   };
+  // gone means the view was left.
+  let gone = false;
   let conv = id ? null : { id: null, title: "", messages: [] };
   let attached = [];
   let editing = -1;
+  // An edit the server refused, shown again in its box.
+  let draft = null;
 
   /* --------------------------------------------------------------- DOM */
 
@@ -91,14 +98,13 @@ export function chatView(app, id) {
   });
 
   const picker = h("input", {
-    // No accept list: a text file can have any name, so attach checks what
-    // each file holds instead.
+    // No accept list: text files can have any name, so attach checks content.
     type: "file",
     multiple: true,
     hidden: true,
     onChange: () => {
       const files = [...picker.files];
-      // Cleared, so choosing the same file again still fires a change.
+      // Clear, so picking the same file again still fires change.
       picker.value = "";
       attach(files);
     },
@@ -127,8 +133,7 @@ export function chatView(app, id) {
     },
     icon(icons.stop),
   );
-  // meter fills as the conversation uses up the model's context. Each
-  // circle's pathLength is 100, so the dash offset is the share still free.
+  // Context meter. pathLength is 100, so the dash offset is the free share.
   const ring = (cls) =>
     svg("circle", {
       class: cls,
@@ -152,7 +157,7 @@ export function chatView(app, id) {
         submit();
       },
       onClick: (e) => {
-        // The whole box is the field, as in other chats.
+        // Clicking anywhere in the box focuses the field.
         if (e.target === composer) input.focus();
       },
     },
@@ -196,8 +201,8 @@ export function chatView(app, id) {
 
   /* --------------------------------------------------------- scrolling */
 
-  // pinned tracks whether the reader is at the bottom, so someone who
-  // scrolled up to reread is not pulled back down by the next token.
+  // pinned means the reader is at the bottom. Someone who scrolled up is not
+  // pulled back down by new tokens.
   let pinned = true;
   scroll.addEventListener("scroll", () => {
     pinned = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 48;
@@ -207,9 +212,8 @@ export function chatView(app, id) {
     if (pinned) scroll.scrollTop = scroll.scrollHeight;
     toBottom.hidden = pinned || !conv || !conv.messages.length;
   }
-  // The thread also changes size without a redraw, when a phone's keyboard
-  // opens or closes or an image loads after its message is drawn. Without
-  // this, the end would slide out of view.
+  // The thread also resizes without a redraw, such as when a phone keyboard
+  // opens or an image loads. This keeps the end in view.
   const resized = new ResizeObserver(stick);
   resized.observe(scroll);
   resized.observe(thread);
@@ -230,7 +234,7 @@ export function chatView(app, id) {
     paintNote();
     paintSend();
     paintMeter();
-    document.title = conv?.title ? `${conv.title} · Keera Chat` : "Keera Chat";
+    setTitle(conv?.title);
     if (!conv) {
       replace(thread, h("div", { class: "thread-loading" }, h("div", { class: "spinner" })));
       return;
@@ -253,7 +257,6 @@ export function chatView(app, id) {
       if (!l || !conv) return render();
       const i = conv.messages.indexOf(l.reply);
       const node = thread.children[i];
-      // The thread's ResizeObserver keeps the end in view as it grows.
       if (node) node.replaceWith(messageEl(l.reply, i));
       else render();
     });
@@ -301,11 +304,9 @@ export function chatView(app, id) {
     input.disabled = !app.choice;
   }
 
-  /** paintMeter shows how much of the chosen model's context the
-   *  conversation used, as the model server last counted it. It hides for a
-   *  router, which has no context of its own, for a count another model made,
-   *  since models count tokens differently, and after a failed reply, which
-   *  may have been refused for being too long. */
+  /** paintMeter shows how much of the model's context is used. It hides for
+   *  a router (no context of its own), for a count by another model (models
+   *  count differently), and after a failed reply (maybe refused as too long). */
   function paintMeter() {
     const model = app.choice?.model;
     const max = model?.context;
@@ -315,7 +316,7 @@ export function chatView(app, id) {
     if (meter.hidden) return;
     const used = counted.tokens;
     const share = Math.min(used / max, 1);
-    const name = model.name || model.alias;
+    const name = model.name;
     let label;
     if (share >= 0.95) {
       label = `${name}'s context is full. Start a new chat, or choose a model that can read more.`;
@@ -339,7 +340,7 @@ export function chatView(app, id) {
         h(
           "div",
           {
-            class: a.url ? "thumb" : "thumb thumb-file",
+            class: a.text != null ? "thumb thumb-file" : "thumb",
             title: a.pages ? null : a.name,
           },
           a.pages ? pdfThumb(a.name, a.pages) : a.url ? imageButton(a.url, a.name) : fileChip(a.name),
@@ -403,14 +404,14 @@ export function chatView(app, id) {
     );
   }
 
-  /** editEl rewrites one of the person's messages. Sending it drops every
-   *  message after it, as in other chats. */
+  /** editEl edits a message. Sending drops every message after it. */
   function editEl(m, i) {
     const box = h("textarea", {
       class: "edit-input",
       "aria-label": "Edit your message",
     });
-    box.value = m.content;
+    box.value = draft ?? m.content;
+    draft = null;
     const cancel = () => {
       editing = -1;
       render();
@@ -419,7 +420,7 @@ export function chatView(app, id) {
       const text = box.value.trim();
       if (!text && !m.images?.length && !m.files?.length) return;
       editing = -1;
-      send({ content: text, images: m.images || [], pdfs: m.pdfs || [], files: m.files || [], edit: i });
+      send({ content: text, images: m.images, pdfs: m.pdfs, files: m.files, edit: i });
     };
     box.addEventListener("keydown", (e) => {
       if (sends(e)) {
@@ -458,7 +459,7 @@ export function chatView(app, id) {
     const canRetry = last && !live() && app.choice;
     const body = h("div", { class: "msg-body" });
     if (m.streaming && !m.content && m.reasoning) {
-      // Without a sign of it, a model that only thinks looks stuck.
+      // Otherwise a model that is only thinking looks stuck.
       body.append(h("div", { class: "thinking shimmer" }, "Thinking…"));
     } else if (m.streaming && !m.content) {
       body.append(
@@ -486,9 +487,7 @@ export function chatView(app, id) {
                 e.currentTarget.closest(".msg").replaceWith(node);
                 node.querySelector(".reasoning")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
               },
-              {
-                attrs: { "aria-expanded": m.showReasoning ? "true" : "false" },
-              },
+              { "aria-expanded": m.showReasoning ? "true" : "false" },
             )
           : null,
         canRetry && !m.error ? iconButton(icons.retry, "Answer again", () => send({ regenerate: true })) : null,
@@ -507,8 +506,7 @@ export function chatView(app, id) {
               "div",
               {},
               sentence(m.error),
-              // What the model's server said, which only helps whoever runs
-              // Keera, so it stays folded away.
+              // The server's own words only help admins, so they stay folded.
               m.error_detail
                 ? h("details", { class: "error-detail" }, h("summary", {}, "Details"), h("div", {}, m.error_detail))
                 : null,
@@ -530,7 +528,7 @@ export function chatView(app, id) {
       m.stopped ? h("div", { class: "msg-note" }, "Stopped.") : null,
       m.finish === "length" ? h("div", { class: "msg-note" }, "The reply reached its length limit.") : null,
       actions,
-      // Opened from the actions, so it shows where the person clicked.
+      // Below the actions, so it opens where the person clicked.
       actions && m.reasoning && m.showReasoning
         ? h(
             "div",
@@ -544,15 +542,14 @@ export function chatView(app, id) {
 
   /* ------------------------------------------------------- attachments */
 
-  // attached holds images as { name, url }, a PDF as { name, url, pages }
-  // with its first page as url, and text files as { name, text }. A sent
-  // message keeps a PDF as its pages among the images, and as { name, at,
-  // pages } in pdfs, where at is its first page's place.
+  // attached holds images as { name, url }, PDFs as { name, pages } and text
+  // files as { name, text }. A sent message keeps PDF pages among its images,
+  // plus { name, at, pages } in pdfs, where at is the first page's index.
   async function attach(files) {
     if (!app.choice) return;
     for (const file of files) {
       const room = maxImages - attached.flatMap(imagesOf).length;
-      if (imageTypes.split(",").includes(file.type)) {
+      if (imageTypes.includes(file.type)) {
         if (!room) {
           toast(`A message can carry at most ${maxImages} images.`, "bad");
           continue;
@@ -569,7 +566,7 @@ export function chatView(app, id) {
         }
         try {
           const { pages, total } = await readPDF(file, room);
-          attached.push({ name: file.name, url: pages[0], pages });
+          attached.push({ name: file.name, pages });
           if (total > pages.length) {
             const first = pages.length === 1 ? "first page" : `first ${pages.length} pages`;
             toast(`Only the ${first} of ${file.name} fit in this message.`, "bad");
@@ -583,7 +580,7 @@ export function chatView(app, id) {
           );
         }
       } else {
-        if (attached.filter((a) => !a.url).length >= maxFiles) {
+        if (attached.filter((a) => a.text != null).length >= maxFiles) {
           toast(`A message can carry at most ${maxFiles} files.`, "bad");
           continue;
         }
@@ -614,9 +611,9 @@ export function chatView(app, id) {
       if (a.pages) pdfs.push({ name: a.name, at: images.length, pages: a.pages.length });
       images.push(...imagesOf(a));
     }
-    const files = attached.filter((a) => !a.url).map(({ name, text }) => ({ name, text }));
-    // A chat that starts with a document alone is named after it.
-    const about = attached.find((a) => !a.url || a.pages)?.name;
+    const files = attached.filter((a) => a.text != null).map(({ name, text }) => ({ name, text }));
+    // A chat started with only a document is named after it.
+    const about = attached.find((a) => !a.url)?.name;
     input.value = "";
     autosize(input);
     attached = [];
@@ -640,7 +637,7 @@ export function chatView(app, id) {
     const lastUser = target.messages.findLastIndex((m) => m.role === "user");
     if (regenerate && lastUser < 0) return;
 
-    // Shown at once, and kept once the server takes it.
+    // Shown now, saved once the server accepts it.
     let ask = null;
     if (regenerate) {
       target.messages = target.messages.slice(0, lastUser + 1);
@@ -656,7 +653,6 @@ export function chatView(app, id) {
       if (edit !== null) target.messages = target.messages.slice(0, edit);
       target.messages.push(ask);
     }
-    // What the model answers: the conversation up to the person's message.
     const turns = target.messages.map(turn);
     const reply = {
       role: "assistant",
@@ -671,8 +667,6 @@ export function chatView(app, id) {
       conv: target,
       reply,
       abort: new AbortController(),
-      raw: "",
-      thought: "",
     };
     if (target.id) app.live.set(target.id, state);
     else view.pending = state;
@@ -680,13 +674,12 @@ export function chatView(app, id) {
     render();
 
     const paintOwner = () => {
-      // Whichever view shows this conversation now, if any.
       const v = app.view;
       if (v && (v.id === target.id || v.pending === state)) v.paint();
     };
 
-    // started is set once the server took the message. Until then, nothing
-    // is kept and the conversation can go back to how it was.
+    // Until the server accepts the message, nothing is saved and the
+    // conversation can be rolled back.
     let started = false;
     let finished = false;
     let changed = false;
@@ -694,8 +687,8 @@ export function chatView(app, id) {
       await exclusive(
         target.id,
         async () => {
-          // Another tab may have written to this conversation since it was
-          // opened here. Sending from the old copy would lose that.
+          // Another tab may have changed this chat. Sending from a stale copy
+          // would lose that.
           if (target.id) {
             const stored = await app.chats.find(target.id);
             if (!stored || stored.updated_at !== target.updated_at) {
@@ -706,7 +699,7 @@ export function chatView(app, id) {
           const stream = await api.chat(
             {
               model: choice.model.alias,
-              model_name: choice.model.name || choice.model.alias,
+              model_name: choice.model.name,
               key_id: choice.key.id,
               instructions: app.settings.instructions,
               messages: turns,
@@ -716,22 +709,23 @@ export function chatView(app, id) {
           started = true;
           await begin(target, state, { content, images, about, choice });
 
+          let raw = "";
+          let thought = "";
           for await (const { event, data } of stream) {
             if (event === "delta") {
-              state.raw += data.content || "";
-              state.thought += data.reasoning || "";
-              const split = splitThink(state.raw);
+              raw += data.content || "";
+              thought += data.reasoning || "";
+              const split = splitThink(raw);
               reply.content = split.content;
-              reply.reasoning = state.thought + split.reasoning;
+              reply.reasoning = thought + split.reasoning;
               paintOwner();
             } else if (event === "done") {
               Object.assign(reply, data, { streaming: false });
               finished = true;
             }
           }
-          // The server always ends with "done", even for a refusal. A stream
-          // that ends without it was cut on the way, such as by a proxy, and
-          // what arrived is only part of the reply.
+          // The server always ends with "done", even on refusal. Without it,
+          // the stream was cut, such as by a proxy.
           if (!finished) reply.error = cutOff;
         },
         () => {
@@ -743,9 +737,14 @@ export function chatView(app, id) {
       if (started && aborted) {
         reply.stopped = true;
       } else if (err instanceof ApiError || aborted) {
-        // Refused or stopped before the server took it, so the conversation
-        // goes back to how it was, and a new message back into the composer.
+        // Refused or stopped before the server accepted it: roll back, and put
+        // the message back in the composer or edit box. A chat changed in
+        // another tab is reloaded, so its edit is dropped.
         target.messages = before;
+        if (edit !== null && app.view === view && !changed) {
+          editing = edit;
+          draft = content;
+        }
         if (ask && edit === null && app.view === view && !input.value) {
           input.value = content;
           attached = [...attachments(images, pdfs), ...files];
@@ -754,8 +753,7 @@ export function chatView(app, id) {
         }
         if (err instanceof ApiError && err.code !== "signed_out") toast(err.message, "bad");
       } else if (started) {
-        // The browser's words for a broken stream, such as "network error",
-        // help only whoever runs Keera, so they are the detail.
+        // Browser errors like "network error" only help admins.
         reply.error = cutOff;
         reply.error_detail = err?.message;
       } else {
@@ -763,7 +761,7 @@ export function chatView(app, id) {
       }
     } finally {
       reply.streaming = false;
-      // A conversation deleted while its reply arrived stays deleted.
+      // Do not bring back a chat deleted while its reply arrived.
       const keep = started && !state.deleted;
       if (keep) {
         reply.created_at ||= new Date().toISOString();
@@ -775,7 +773,7 @@ export function chatView(app, id) {
           reply.error_detail = undefined;
         }
       }
-      // Only once it is kept, so a next message cannot start from before it.
+      // Only after saving, so the next message cannot start from before it.
       if (target.id) app.live.delete(target.id);
       if (view.pending === state) view.pending = null;
       if (keep) app.saw(summary(target));
@@ -786,9 +784,8 @@ export function chatView(app, id) {
     }
   }
 
-  /** begin keeps a conversation once the server took its new message, so
-   *  the message is not lost whatever happens to the reply. A new
-   *  conversation gets its id and its place in the sidebar here. */
+  /** begin saves the conversation once the server accepts the message, so
+   *  it is not lost if the reply fails. A new chat gets its id here. */
   async function begin(target, state, { content, images, about, choice }) {
     const now = new Date().toISOString();
     if (!target.id) {
@@ -797,8 +794,7 @@ export function chatView(app, id) {
       target.created_at = now;
       app.live.set(target.id, state);
       if (view.pending === state) view.pending = null;
-      // The address follows the new conversation, unless the person already
-      // went somewhere else.
+      // Update the URL, unless the person already left.
       if (app.view === view) {
         view.id = target.id;
         history.replaceState(null, "", "/c/" + target.id);
@@ -813,16 +809,16 @@ export function chatView(app, id) {
         messages: target.messages.filter((m) => m !== state.reply),
       });
     } catch {
-      // The reply is kept with it at the end, or says why it could not be.
+      // The final save retries, and the reply shows any error.
     }
     if (!state.deleted) app.saw(summary(target));
   }
 
-  /** retitle takes a title given in the sidebar, so the next save keeps it. */
+  /** retitle applies a sidebar rename, so the next save keeps it. */
   function retitle(title) {
     if (!conv) return;
     conv.title = title;
-    document.title = `${title} · Keera Chat`;
+    setTitle(title);
   }
 
   /* ------------------------------------------------------------- setup */
@@ -839,7 +835,7 @@ export function chatView(app, id) {
       } catch (err) {
         failed = err.message;
       }
-      // The page was closed while the reply arrived, so it was not kept.
+      // The page closed while the reply arrived, so it was not saved.
       if (conv && conv.messages.at(-1)?.role === "user") {
         conv.messages.push({
           role: "assistant",
@@ -849,7 +845,7 @@ export function chatView(app, id) {
         });
       }
     }
-    if (view.gone) return;
+    if (gone) return;
     if (failed) {
       replace(
         thread,
@@ -869,13 +865,12 @@ export function chatView(app, id) {
   }
 
   function destroy() {
-    view.gone = true;
+    gone = true;
     resized.disconnect();
-    // The reply it was showing keeps streaming without it.
+    // A live reply keeps streaming.
   }
 
-  // Settled before the first paint, which shows the composer only when there
-  // is a model to send to.
+  // Before the first paint, which shows the composer only with a model.
   if (!id) app.choose(null, null);
   render();
   if (id) load();
@@ -884,19 +879,17 @@ export function chatView(app, id) {
 
 /* --------------------------------------------------------------- helpers */
 
-/** sends says whether a key press sends what was written: Enter sends and
- *  Shift+Enter breaks the line, as in every chat. */
+/** sends: Enter sends, Shift+Enter adds a line. */
 function sends(e) {
   return e.key === "Enter" && !e.shiftKey && !e.isComposing;
 }
 
-/** copyButton copies a message's text, for a message that has any. */
 function copyButton(m) {
   return m.content ? iconButton(icons.copy, "Copy", () => copyText(m.content)) : null;
 }
 
-/** turn is a message as the server reads it. A reply that failed is marked,
- *  so the server leaves it out of what goes to the model. */
+/** turn is a message for the server. Failed replies are marked so the
+ *  server leaves them out. */
 function turn(m) {
   const t = { role: m.role, content: m.content || "" };
   if (m.images?.length) t.images = m.images;
@@ -905,8 +898,8 @@ function turn(m) {
   return t;
 }
 
-/** titleFrom names a new conversation after its first message. Asking the
- *  model for a title would spend the person's budget on every new chat. */
+/** titleFrom names a chat after its first message. Asking the model would
+ *  spend the person's budget on every new chat. */
 function titleFrom(text, images, about) {
   const t = oneLine(text, 60) || oneLine(about || "", 60);
   if (t) return t;
@@ -922,12 +915,12 @@ function greeting(user) {
   return first ? `${part}, ${first}` : part;
 }
 
-/** heroLine names the model before its description, since a description
- *  alone reads as if it were about chat itself. */
+/** heroLine names the model first. A description alone reads as if it were
+ *  about chat itself. */
 function heroLine(app) {
   const m = app.choice.model;
   const about = m.description || (m.router ? "It picks the right model for each message" : "How can I help?");
-  return ["You're chatting with ", h("strong", {}, m.name || m.alias), ": ", sentence(about)];
+  return ["You're chatting with ", h("strong", {}, m.name), ": ", sentence(about)];
 }
 
 function modelName(app, alias) {
@@ -935,8 +928,7 @@ function modelName(app, alias) {
   return m?.name || alias || "";
 }
 
-/** accessNotice explains why there is nothing to chat with, and who can
- *  change that. */
+/** accessNotice explains why no model is available, and who can fix it. */
 function accessNotice(app) {
   const { me } = app;
   const panel = (path, label) => h("a", { href: me.gateway_url + path, target: "_blank", rel: "noopener" }, label);
@@ -971,9 +963,9 @@ function accessNotice(app) {
   return h("div", { class: "notice" }, h("strong", {}, title), h("p", {}, body));
 }
 
-/** splitThink takes the thinking out of a reply that writes it inline as
- *  <think>…</think>. Some chat templates open the tag in the prompt, so the
- *  reply only closes it. The server does the same for the finished reply. */
+/** splitThink pulls inline <think>…</think> out of a reply. Some chat
+ *  templates open the tag in the prompt, so the reply only closes it. The
+ *  server does the same for the finished reply. */
 function splitThink(text) {
   const open = text.match(/^\s*<think>/);
   const end = text.indexOf("</think>");
@@ -987,10 +979,10 @@ function splitThink(text) {
 }
 
 async function readImage(file) {
-  // Also checks that the file is an image at all.
+  // Also checks that the file is an image.
   const bitmap = await createImageBitmap(file);
   const scale = maxImageSide / Math.max(bitmap.width, bitmap.height);
-  // A GIF is kept as it is, because redrawing it would drop its animation.
+  // Keep GIFs as they are. Redrawing drops the animation.
   if (scale >= 1 || file.type === "image/gif") {
     bitmap.close();
     return new Promise((resolve, reject) => {
@@ -1009,10 +1001,9 @@ async function readImage(file) {
   return canvas.toDataURL(file.type, 0.9);
 }
 
-/** readPDF draws a PDF's first pages as images, as many as there is room
- *  for. Models here read images but not PDFs, and an image of a page also
- *  keeps its tables, figures and scans. pdf.js is loaded only now, since it
- *  is large. */
+/** readPDF renders a PDF's first pages as images, as many as fit. Models
+ *  here read images but not PDFs, and images keep tables, figures and scans.
+ *  pdf.js is large, so it loads only when needed. */
 async function readPDF(file, room) {
   const pdfjs = await import("./vendor/pdfjs/pdf.min.mjs");
   pdfjs.GlobalWorkerOptions.workerSrc = "/assets/vendor/pdfjs/pdf.worker.min.mjs";
@@ -1026,8 +1017,8 @@ async function readPDF(file, room) {
       const viewport = page.getViewport({ scale: maxImageSide / Math.max(size.width, size.height) });
       const canvas = h("canvas", { width: Math.floor(viewport.width), height: Math.floor(viewport.height) });
       await page.render({ canvas, viewport }).promise;
-      // JPEG, since a page as PNG is several times larger, and every image is
-      // sent again with each later message.
+      // JPEG, since PNG is several times larger and each image is resent with
+      // every later message.
       pages.push(canvas.toDataURL("image/jpeg", 0.85));
       page.cleanup();
     }
@@ -1037,21 +1028,20 @@ async function readPDF(file, room) {
   }
 }
 
-/** attachments groups a message's images as they were attached: a PDF's
- *  pages as { name, url, pages }, and other images as { name, url }. */
+/** attachments regroups a message's images: PDFs as { name, pages }, other
+ *  images as { name, url }. */
 function attachments(images = [], pdfs = []) {
   const out = [];
-  for (let n = 0; n < images.length; ) {
+  for (let n = 0; n < images.length;) {
     const pdf = pdfs.find((p) => p.at === n && p.pages > 0);
     const pages = pdf ? images.slice(n, n + pdf.pages) : null;
-    out.push(pdf ? { name: pdf.name, url: pages[0], pages } : { name: `image ${n + 1}`, url: images[n] });
+    out.push(pdf ? { name: pdf.name, pages } : { name: `image ${n + 1}`, url: images[n] });
     n += pages ? pages.length : 1;
   }
   return out;
 }
 
-/** bubbleImages shows a sent message's images, each PDF as one stack. The
- *  other images open in one viewer together. */
+/** bubbleImages shows each PDF as a stack. Other images share one viewer. */
 function bubbleImages(m) {
   const parts = attachments(m.images, m.pdfs);
   const plain = parts.filter((a) => !a.pages).map((a) => a.url);
@@ -1063,24 +1053,23 @@ function bubbleImages(m) {
   );
 }
 
-/** pdfThumb shows a PDF as its first page, with the others as a stack
- *  behind it and their count. Opening it flips through them. */
+/** pdfThumb shows a PDF's first page, stacked with a page count. */
 function pdfThumb(name, pages) {
   const many = pages.length > 1;
   return h(
     "span",
-    { class: "pdf-stack" + (many ? " is-stack" : ""), title: `${name}, ${many ? `${pages.length} pages` : "1 page"}` },
+    { class: "pdf-stack" + (many ? " is-stack" : ""), title: `${name}, ${count(pages.length, "page")}` },
     imageButton(pages[0], name, { gallery: pages }),
     many ? h("span", { class: "pdf-count", "aria-hidden": "true" }, `${pages.length} pages`) : null,
   );
 }
 
-/** imagesOf is what an attachment sends as images: a PDF its pages. */
+/** imagesOf returns an attachment's images. A PDF sends its pages. */
 function imagesOf(a) {
   return a.pages || (a.url ? [a.url] : []);
 }
 
-/** readText reads a file that holds UTF-8 text, and refuses any other. */
+/** readText reads a UTF-8 text file and rejects anything else. */
 async function readText(file) {
   const text = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
   if (text.includes("\0")) throw new Error("binary");

@@ -1,7 +1,6 @@
-// Package secret seals chat's cookies: the session cookie, which carries a
-// person's gateway sign-in, and the sign-in's PKCE verifier on its way. The
-// key lives only in the process environment, so a cookie jar stolen from a
-// backup holds ciphertext.
+// Package secret encrypts chat's cookies: the session, which holds the
+// gateway token, and the PKCE verifier. The key lives only in the
+// environment, so stolen cookies are useless.
 package secret
 
 import (
@@ -16,14 +15,12 @@ type Box struct {
 }
 
 func New(key string) (*Box, error) {
-	// config.Load refuses a shorter key first, naming the setting. This
-	// guards any other caller.
+	// config.Load checks this too. This guards other callers.
 	if len(key) < 16 {
 		return nil, errors.New("the secret key must be at least 16 characters; " +
 			"generate one with: openssl rand -hex 32")
 	}
-	// Domain separation: the same value set as the gateway's key still yields
-	// a different key here.
+	// Domain separation: reusing the gateway's key still gives a different key.
 	sum := sha256.Sum256([]byte("keera-chat-v1|" + key))
 	block, err := aes.NewCipher(sum[:])
 	if err != nil {
@@ -36,8 +33,8 @@ func New(key string) (*Box, error) {
 	return &Box{aead: aead}, nil
 }
 
-// Seal encrypts plaintext for the place name names. The name is
-// authenticated, so a ciphertext moved to another place fails to open.
+// Seal encrypts plaintext bound to name, so it cannot be opened under
+// another name.
 func (b *Box) Seal(name string, plaintext []byte) []byte {
 	return b.aead.Seal(nil, nil, plaintext, []byte(name))
 }

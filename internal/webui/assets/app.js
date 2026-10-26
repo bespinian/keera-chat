@@ -1,5 +1,4 @@
-// Keera Chat: the page. It routes on the URL itself: / is a new chat and
-// /c/<id> a conversation.
+// The page. / is a new chat, /c/<id> a conversation.
 
 import { api, ApiError, whenSignedOut } from "./api.js";
 import { chatView } from "./chat.js";
@@ -24,6 +23,8 @@ import {
   remember,
   oneLine,
   sentence,
+  count,
+  setTitle,
   idpMark,
 } from "./ui.js";
 
@@ -32,17 +33,17 @@ fitScreen();
 
 const root = document.getElementById("root");
 
-/** app is the state every part of the page shares. */
+/** app is the state shared across the page. */
 const app = {
   me: null,
-  // The person's conversations in this browser. See store.js.
+  // See store.js.
   chats: null,
   conversations: [],
   settings: { instructions: "" },
-  // choice is the model and key the next message goes with.
+  // The model and key for the next message.
   choice: null,
   view: null,
-  // Replies still streaming, by conversation id. See chat.js.
+  // Streaming replies by conversation id. See chat.js.
   live: new Map(),
   choose,
   saw,
@@ -55,11 +56,12 @@ async function boot() {
   whenSignedOut(signIn);
   try {
     app.me = await api.me();
+    for (const m of app.me.models) m.name ||= m.alias;
     app.chats = chats(app.me.user.id + "|" + app.me.user.org_id);
-    [app.conversations, app.settings] = await Promise.all([app.chats.list(), app.chats.settings()]);
+    await loadChats();
   } catch (err) {
-    // whenSignedOut has already shown the sign-in screen. Showing it again
-    // would lose the sign-in error, which the server gives only once.
+    // whenSignedOut already showed sign-in. Showing it again would lose the
+    // sign-in error, which the server sends only once.
     if (err instanceof ApiError && err.code === "signed_out") return;
     if (err instanceof ApiError && err.status === 401) return signIn();
     return fatal(err);
@@ -67,28 +69,26 @@ async function boot() {
   shell();
   route();
   window.addEventListener("popstate", route);
-  // A reply is kept once it is complete, so leaving while one arrives loses
-  // it. The browser asks the person first.
+  // A reply is saved only once complete, so warn before leaving.
   window.addEventListener("beforeunload", (e) => {
-    if (app.live.size) {
-      e.preventDefault();
-      e.returnValue = "";
-    }
+    if (app.live.size) e.preventDefault();
   });
 }
 
-// A phone's keyboard covers the bottom of the page, and the composer with it.
-// Chrome and Firefox shrink the page instead (interactive-widget in
-// index.html), but Safari does not, so the shell takes the height of what is
-// still in view.
+async function loadChats() {
+  [app.conversations, app.settings] = await Promise.all([app.chats.list(), app.chats.settings()]);
+}
+
+// A phone keyboard covers the composer. Chrome and Firefox shrink the page
+// (interactive-widget in index.html). Safari does not, so we fit the shell to
+// the visible height.
 function fitScreen() {
   const vv = window.visualViewport;
   if (!vv) return;
   const fit = () => {
-    // Times the scale, so zooming in does not shrink the page as well.
+    // Times scale, so zooming in does not shrink the page.
     document.documentElement.style.setProperty("--screen-height", `${vv.height * vv.scale}px`);
-    // Safari scrolls the page up to show the field, which leaves the top of
-    // the shell out of view once it is short enough to fit.
+    // Safari scrolls up to show the field, which hides the top of the shell.
     if (vv.scale === 1) window.scrollTo(0, 0);
   };
   vv.addEventListener("resize", fit);
@@ -102,8 +102,7 @@ function fatal(err) {
   );
 }
 
-/** card fills the page with one card under the brand, for signing in or a
- *  start that failed. */
+/** card shows one card under the brand, for sign-in or a failed start. */
 function card(...children) {
   root.className = "";
   replace(
@@ -111,26 +110,20 @@ function card(...children) {
     h(
       "div",
       { class: "signin" },
-      h(
-        "div",
-        { class: "signin-card" },
-        h(
-          "div",
-          { class: "signin-brand" },
-          h("img", { src: "/assets/favicon.svg", alt: "", width: 28, height: 28, class: "brand-mark" }),
-          "Keera Chat",
-        ),
-        ...children,
-      ),
+      h("div", { class: "signin-card" }, h("div", { class: "signin-brand" }, brandMark(28), "Keera Chat"), ...children),
     ),
   );
+}
+
+function brandMark(size) {
+  return h("img", { src: "/assets/favicon.svg", alt: "", width: size, height: size, class: "brand-mark" });
 }
 
 /* --------------------------------------------------------------- sign in */
 
 async function signIn() {
-  document.title = "Sign in · Keera Chat";
-  // Why the last sign-in failed comes with the config, and only once.
+  setTitle("Sign in");
+  // The last sign-in error comes with the config, only once.
   let error = "";
   let cfg = null;
   try {
@@ -223,12 +216,7 @@ function shell() {
     h(
       "div",
       { class: "sidebar-head" },
-      h(
-        "a",
-        { class: "brand", href: "/", onClick: (e) => go(e, "/") },
-        h("img", { src: "/assets/favicon.svg", alt: "", width: 24, height: 24, class: "brand-mark" }),
-        "Keera Chat",
-      ),
+      h("a", { class: "brand", href: "/", onClick: (e) => go(e, "/") }, brandMark(24), "Keera Chat"),
       iconButton(icons.sidebar, "Close the sidebar", () => toggleSidebar(true), { class: "hide-narrow" }),
       iconButton(icons.close, "Close the menu", () => setNav(false), { class: "show-narrow" }),
     ),
@@ -272,7 +260,7 @@ function shell() {
   paintList();
 
   document.addEventListener("keydown", (e) => {
-    // Ctrl or Cmd + Shift + O starts a new chat, as in ChatGPT.
+    // Ctrl/Cmd+Shift+O starts a new chat, as in ChatGPT.
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "o") {
       e.preventDefault();
       go(null, "/");
@@ -281,7 +269,7 @@ function shell() {
 }
 
 function shortcutLabel() {
-  return /Mac|iPhone|iPad/.test(navigator.platform) ? "⇧⌘O" : "Ctrl+Shift+O";
+  return /Mac|iPhone|iPad/.test(navigator.userAgent) ? "⇧⌘O" : "Ctrl+Shift+O";
 }
 
 function toggleSidebar(close) {
@@ -289,7 +277,7 @@ function toggleSidebar(close) {
   remember("sidebar", close ? "closed" : "");
 }
 
-/** setNav opens or closes the sidebar as a drawer, on a narrow screen. */
+/** setNav opens or closes the sidebar drawer on narrow screens. */
 function setNav(open) {
   els.shell.classList.toggle("nav-open", open);
   if (open) els.search.focus();
@@ -299,7 +287,7 @@ function setNav(open) {
 
 function go(e, path) {
   if (e) {
-    // A click with a modifier opens a tab, as links do.
+    // Let a modifier click open a new tab.
     if (e.ctrlKey || e.metaKey || e.shiftKey) return;
     e.preventDefault();
   }
@@ -313,21 +301,20 @@ function route() {
   const id = m ? m[1] : null;
   if (!m && location.pathname !== "/") history.replaceState(null, "", "/");
   setNav(false);
-  // Already there: a new chat that just got its id, or the same link again.
+  // Already shown: a new chat that just got its id, or the same link.
   if (app.view && id && app.view.id === id) return;
   if (app.view) app.view.destroy();
   app.view = chatView(app, id);
   replace(els.main, app.view.el);
   paintList();
-  // Not on a phone, where focusing the field pops up the keyboard.
+  // Not on phones, where focus opens the keyboard.
   if (matchMedia("(min-width: 769px)").matches) app.view.focus();
 }
 
 /* ------------------------------------------------------------------ model */
 
-/** choose settles the model and key the next message goes with: the ones
- *  asked for if the person may still use them, else the last ones they
- *  picked, else the first. */
+/** choose sets the model and key for the next message: the ones asked for
+ *  if still allowed, else the last picked, else the first. */
 function choose(alias, keyID) {
   const models = app.me.models;
   if (!models.length) {
@@ -352,31 +339,27 @@ function paintPicker() {
   const c = app.choice;
   els.picker.hidden = !c;
   if (!c) return;
-  replace(
-    els.picker,
-    h("span", { class: "model-picker-name" }, c.model.name || c.model.alias),
-    icon(icons.chevronDown),
-  );
+  replace(els.picker, h("span", { class: "model-picker-name" }, c.model.name), icon(icons.chevronDown));
 }
 
 function modelMenu(anchor) {
   const c = app.choice;
   if (!c) return;
   const items = app.me.models.map((m) => ({
-    label: m.name || m.alias,
+    label: m.name,
     hint: m.router
       ? m.description || "Picks a model for each message"
-      : m.description || (m.name && m.name !== m.alias ? m.alias : ""),
+      : m.description || (m.name !== m.alias ? m.alias : ""),
     icon: m.router ? icons.router : icons.sparkle,
     checked: m.alias === c.model.alias,
     onClick: () => {
       remember("model", m.alias);
-      choose(m.alias, remembered("key:" + m.alias));
+      choose(m.alias);
       app.view?.render();
     },
   }));
-  // Most people hold one key and never see this. Someone with several picks
-  // which one pays, since each has its own budget and rules.
+  // With several keys, the person picks which one pays. Each has its own
+  // budget and rules.
   const keys = keysFor(c.model.alias);
   if (keys.length > 1) {
     items.push({ separator: true }, { heading: "Send with key" });
@@ -398,8 +381,7 @@ function modelMenu(anchor) {
 
 /* ------------------------------------------------------------------- list */
 
-/** saw records that a conversation was created or used, so the sidebar
- *  lists it first. */
+/** saw moves a conversation to the top of the sidebar. */
 function saw(summary) {
   const i = app.conversations.findIndex((c) => c.id === summary.id);
   const prev = i >= 0 ? app.conversations.splice(i, 1)[0] : {};
@@ -487,8 +469,8 @@ function convMenu(anchor, c, item) {
   ]);
 }
 
-/** drop stops a reply whose conversation is being deleted, so it does not
- *  save the conversation again when it ends. */
+/** drop stops the reply of a deleted conversation, so it does not save it
+ *  again. */
 function drop(live) {
   if (!live) return;
   live.deleted = true;
@@ -506,8 +488,8 @@ function renameInline(c, item) {
       try {
         await app.chats.rename(c.id, title);
         c.title = title;
-        // The open chat and a reply still arriving each hold the conversation
-        // too, and save it whole, so they must not keep the old title.
+        // The open view and a live reply save the whole conversation, so
+        // update their title too.
         const l = app.live.get(c.id);
         if (l) l.conv.title = title;
         if (app.view?.id === c.id) app.view.retitle(title);
@@ -527,7 +509,7 @@ function renameInline(c, item) {
   field.select();
 }
 
-/** bucket names the group a conversation is listed under. */
+/** bucket returns the sidebar group for a date. */
 function bucket(iso) {
   const then = new Date(iso);
   const today = new Date();
@@ -607,12 +589,12 @@ function accountMenu(anchor) {
   menu(anchor, items, { up: true, wide: true });
 }
 
-/** budgetEl shows how much of the tightest budget above the current key is
- *  spent, so a refusal for a spent budget does not come as a surprise. */
+/** budgetEl shows the spend of the tightest budget above the key, so a
+ *  refusal is no surprise. */
 function budgetEl(b) {
   const share = Math.min(1, b.spend_micros / b.budget_micros);
   const period = { day: "today", week: "this week", month: "this month" }[b.period] || "";
-  // Whose budget it is, so the person knows whom to ask for more.
+  // Whose budget, so the person knows whom to ask for more.
   const owner = { org: "Organisation", project: "Project", key: "Key" }[b.scope] || "";
   return h(
     "div",
@@ -645,7 +627,7 @@ async function switchOrg(o) {
   } catch (err) {
     return toast(err.message, "bad");
   }
-  // Keys, models and chats all belong to the organisation, so start over.
+  // Keys, models and chats belong to the organisation, so start over.
   location.href = "/";
 }
 
@@ -678,8 +660,8 @@ async function instructions() {
   }
 }
 
-/** exportChats saves the person's chats in this organisation to a file, so
- *  they can take them to another browser or computer. */
+/** exportChats saves this organisation's chats to a file, to move them to
+ *  another browser. */
 async function exportChats() {
   let file;
   try {
@@ -690,9 +672,7 @@ async function exportChats() {
   if (!file.conversations.length) return toast("You have no chats to export yet.");
   const url = URL.createObjectURL(new Blob([JSON.stringify(file)], { type: "application/json" }));
   const link = h("a", { href: url, download: `keera-chats-${file.exported_at.slice(0, 10)}.json` });
-  document.body.append(link);
   link.click();
-  link.remove();
   // The browser reads the file a little after the click.
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
   toast(`Exported ${count(file.conversations.length, "chat")}. Anyone with the file can read them.`, "good");
@@ -710,15 +690,9 @@ function importChats() {
 async function importFile(f) {
   let result;
   try {
-    let data;
-    try {
-      data = JSON.parse(await f.text());
-    } catch {
-      throw new Error("This is not a file exported from Keera Chat.");
-    }
-    // A chat whose reply is still arriving is kept once the reply is in.
-    result = await app.chats.importAll(data, new Set(app.live.keys()));
-    [app.conversations, app.settings] = await Promise.all([app.chats.list(), app.chats.settings()]);
+    // Skip chats with a live reply. The reply saves them when it ends.
+    result = await app.chats.importAll(await f.text(), new Set(app.live.keys()));
+    await loadChats();
   } catch (err) {
     return toast(err.message, "bad");
   }
@@ -735,10 +709,6 @@ async function importFile(f) {
   let message = done.length ? sentence(done.join(" and ")) : "These chats are all here already.";
   if (result.instructions) message += " Your custom instructions came with them.";
   toast(message, "good");
-}
-
-function count(n, noun) {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }
 
 async function deleteAll() {
@@ -763,8 +733,7 @@ async function signOut() {
   try {
     await api.logout();
   } catch (err) {
-    // The server clears the cookie, so a request that never reached it
-    // leaves the person signed in.
+    // Only the server clears the cookie, so the person is still signed in.
     return toast(err.message, "bad");
   }
   location.href = "/";
