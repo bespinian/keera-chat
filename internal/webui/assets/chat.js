@@ -213,10 +213,15 @@ export function chatView(app, id) {
     toBottom.hidden = pinned || !conv || !conv.messages.length;
   }
   // The thread also resizes without a redraw, such as when a phone keyboard
-  // opens or an image loads. This keeps the end in view.
-  const resized = new ResizeObserver(stick);
+  // opens or an image loads. This keeps the end in view. The dock floats
+  // over the thread, so the thread leaves room for its height.
+  const resized = new ResizeObserver(() => {
+    el.style.setProperty("--dock-height", `${dock.offsetHeight}px`);
+    stick();
+  });
   resized.observe(scroll);
   resized.observe(thread);
+  resized.observe(dock);
 
   /* -------------------------------------------------------- rendering */
 

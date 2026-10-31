@@ -1,4 +1,5 @@
-/* Keera Chat's stylesheet. Tokens match Keera Gateway's panel. */
+/* Keera Chat's stylesheet. The colours are shared with Keera Gateway's
+   panel; change them in both. */
 
 @font-face {
   font-family: "Space Grotesk";
@@ -10,25 +11,38 @@
 
 :root {
   color-scheme: light dark;
-  --bg: light-dark(#f7f7f5, #121215);
-  --surface: light-dark(#ffffff, #1a1a1e);
-  --surface-2: light-dark(#fafaf9, #1f1f24);
-  --surface-3: light-dark(#f1f0ed, #26262c);
-  --border: light-dark(#e4e2dd, #2b2b32);
-  --border-strong: light-dark(#d2cfc8, #3a3a43);
-  --text: light-dark(#17171a, #ececef);
-  --muted: light-dark(#6b6a66, #9c9ba4);
-  --faint: light-dark(#93918b, #74737c);
-  --accent: light-dark(#1f5bc8, #7ea8ff);
-  --accent-soft: light-dark(#e8effc, #1a2440);
-  --accent-fg: light-dark(#ffffff, #0d1322);
+  /* Cool greys and the docs' blue-black dark ground. */
+  --bg: light-dark(#f6f7f9, #0b0e13);
+  --surface: light-dark(#ffffff, #161a22);
+  --surface-2: light-dark(#f9fafb, #1a1e27);
+  --surface-3: light-dark(#eff1f4, #222731);
+  /* Translucent, so lines stay soft on glass as well as on a card. */
+  --border: light-dark(rgb(16 24 40 / 10%), rgb(220 228 255 / 12%));
+  --border-strong: light-dark(rgb(16 24 40 / 18%), rgb(220 228 255 / 20%));
+  --text: light-dark(#15171c, #f8f9fb);
+  --muted: light-dark(#636975, #b6bcc6);
+  --faint: light-dark(#8b919c, #8b919e);
+  --accent: light-dark(#1657c8, #6ea8ff);
+  --accent-soft: light-dark(#e7eefb, #172440);
+  --accent-fg: light-dark(#ffffff, #0b1220);
   --good: light-dark(#1c7a4d, #57cb90);
+  --good-soft: light-dark(#e6f4ec, #13271e);
   --warn: light-dark(#9a5b00, #dfa445);
-  --warn-soft: light-dark(#fbf0dd, #2a2113);
+  --warn-soft: light-dark(#fbf0dd, #29200f);
   --bad: light-dark(#a92a20, #ef7b70);
-  --bad-soft: light-dark(#fbeae8, #2c1917);
-  --radius: 10px;
-  --radius-sm: 7px;
+  --bad-soft: light-dark(#fbeae8, #2b1818);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 16px;
+  /* Frosted glass, as in the docs' theme: what floats over the page lets it
+     show through, blurred. */
+  --glass: color-mix(in srgb, var(--surface) 72%, transparent);
+  --glass-bg: color-mix(in srgb, var(--bg) 72%, transparent);
+  --veil: color-mix(in srgb, var(--bg) 55%, transparent);
+  --blur: blur(8px) saturate(160%);
+  /* A hover on glass, which a solid grey would cover. */
+  --hover: color-mix(in srgb, var(--text) 6%, transparent);
+  --topbar-height: 56px;
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
   --sans:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto,
@@ -45,18 +59,40 @@
   color-scheme: dark;
 }
 
-/* The shadow cannot use light-dark(), so dark is set twice: for the media
-   query and for the menu's choice. The CSP blocks an inline theme script. */
+/* Shadows cannot use light-dark(), so dark is set twice: for the media query
+   and for the menu's choice. The CSP blocks an inline theme script. */
 :root {
-  --shadow: 0 1px 2px rgb(23 23 26 / 6%), 0 8px 24px -12px rgb(23 23 26 / 18%);
+  --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 8px 24px -12px rgb(16 24 40 / 18%);
+  --shadow-lg:
+    0 1px 2px rgb(16 24 40 / 8%), 0 18px 48px -12px rgb(16 24 40 / 28%);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 10px 30px -14px rgb(0 0 0 / 70%);
+    --shadow-lg: 0 1px 2px rgb(0 0 0 / 50%), 0 24px 60px -12px rgb(0 0 0 / 80%);
   }
 }
 :root[data-theme="dark"] {
   --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 10px 30px -14px rgb(0 0 0 / 70%);
+  --shadow-lg: 0 1px 2px rgb(0 0 0 / 50%), 0 24px 60px -12px rgb(0 0 0 / 80%);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass: var(--surface);
+    --glass-bg: var(--bg);
+  }
+}
+
+/* Surfaces that float over content. */
+.sidebar,
+.topbar,
+.composer,
+.to-bottom,
+.menu,
+.toast {
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
 }
 
 * {
@@ -190,12 +226,15 @@ code {
 }
 .shell.sidebar-collapsed .sidebar {
   visibility: hidden;
-  border-right-color: transparent;
 }
 
+/* The sidebar floats as a card, inset from the edge. */
 .sidebar {
-  background: var(--surface);
-  border-right: 1px solid var(--border);
+  margin: 8px 0 8px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--glass);
+  box-shadow: var(--shadow);
   padding: 14px 10px 10px;
   display: flex;
   flex-direction: column;
@@ -227,7 +266,7 @@ code {
   white-space: nowrap;
 }
 .brand:hover {
-  background: var(--surface-3);
+  background: var(--hover);
   text-decoration: none;
 }
 .brand-mark {
@@ -250,7 +289,7 @@ code {
   transition: background 0.12s;
 }
 .new-chat:hover {
-  background: var(--surface-3);
+  background: var(--hover);
   text-decoration: none;
 }
 .new-chat kbd {
@@ -325,7 +364,7 @@ code {
 }
 .conv-item:hover,
 .conv-item:focus-within {
-  background: var(--surface-3);
+  background: var(--hover);
 }
 .conv-item.is-current {
   background: var(--accent-soft);
@@ -403,7 +442,7 @@ code {
 }
 .account:hover,
 .account[aria-expanded="true"] {
-  background: var(--surface-3);
+  background: var(--hover);
 }
 .account > svg {
   color: var(--faint);
@@ -435,19 +474,24 @@ code {
 }
 
 .main {
+  position: relative;
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
 
+/* The thread scrolls beneath the top bar. */
 .topbar {
-  flex: none;
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 10;
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 10px 14px;
-  min-height: 56px;
+  min-height: var(--topbar-height);
+  background: var(--glass-bg);
 }
 
 .main-body {
@@ -487,7 +531,7 @@ code {
 }
 .model-picker:hover,
 .model-picker[aria-expanded="true"] {
-  background: var(--surface-3);
+  background: var(--hover);
 }
 .model-picker svg {
   color: var(--muted);
@@ -565,7 +609,7 @@ code {
 }
 .icon-btn:hover:not(:disabled),
 .icon-btn[aria-expanded="true"] {
-  background: var(--surface-3);
+  background: var(--hover);
   color: var(--text);
 }
 .icon-btn:disabled {
@@ -640,7 +684,8 @@ code {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  padding-block: 12px 40px;
+  padding-block: calc(var(--topbar-height) + 12px)
+    calc(var(--dock-height, 0px) + 32px);
 }
 .thread-loading,
 .thread-failed {
@@ -660,6 +705,9 @@ code {
 /* New chat: greeting and composer sit centered until the first message. */
 .hero {
   display: none;
+}
+.chat.is-empty {
+  padding-top: var(--topbar-height);
 }
 .chat.is-empty .chat-scroll,
 .chat.is-empty .to-bottom {
@@ -714,7 +762,7 @@ code {
   margin-top: 10px;
   padding: 18px 20px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow);
   text-align: left;
@@ -1154,6 +1202,18 @@ h6.md-h {
   display: grid;
   gap: 8px;
 }
+/* Once there are messages, the dock floats over the thread. The thread stays
+   scrollable through the gaps. */
+.chat:not(.is-empty) .dock {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 4;
+  background: linear-gradient(transparent 30%, var(--bg) calc(100% - 40px));
+  pointer-events: none;
+}
+.dock > .column > * {
+  pointer-events: auto;
+}
 
 .composer {
   display: flex;
@@ -1162,7 +1222,7 @@ h6.md-h {
   padding: 10px 10px 8px 14px;
   border: 1px solid var(--border-strong);
   border-radius: 24px;
-  background: var(--surface);
+  background: var(--glass);
   box-shadow: var(--shadow);
   cursor: text;
   transition: border-color 0.12s;
@@ -1320,7 +1380,7 @@ h6.md-h {
   bottom: 4px;
   padding: 1px 5px;
   border-radius: 999px;
-  background: rgb(10 10 12 / 70%);
+  background: rgb(11 14 19 / 70%);
   color: #ffffff;
   font-size: 10px;
   font-weight: 600;
@@ -1349,7 +1409,7 @@ h6.md-h {
 .to-bottom {
   position: absolute;
   left: 50%;
-  bottom: 120px;
+  bottom: calc(var(--dock-height, 0px) + 12px);
   z-index: 5;
   display: grid;
   place-items: center;
@@ -1358,7 +1418,7 @@ h6.md-h {
   padding: 0;
   border: 1px solid var(--border-strong);
   border-radius: 50%;
-  background: var(--surface);
+  background: var(--glass);
   color: var(--muted);
   box-shadow: var(--shadow);
   transform: translateX(-50%);
@@ -1380,8 +1440,8 @@ h6.md-h {
   padding: 5px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow);
+  background: var(--glass);
+  box-shadow: var(--shadow-lg);
   animation: rise 0.1s ease-out;
 }
 .menu-wide {
@@ -1404,7 +1464,7 @@ h6.md-h {
 }
 .menu-item:hover,
 .menu-item:focus-visible {
-  background: var(--surface-3);
+  background: var(--hover);
   outline: none;
   text-decoration: none;
 }
@@ -1498,7 +1558,9 @@ h6.md-h {
   display: grid;
   place-items: center;
   padding: 20px;
-  background: rgb(10 10 12 / 45%);
+  background: var(--veil);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
   animation: fade 0.12s ease-out;
 }
 @keyframes fade {
@@ -1512,9 +1574,9 @@ h6.md-h {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-lg);
 }
 .modal-head {
   padding: 16px 18px 12px;
@@ -1541,12 +1603,12 @@ h6.md-h {
   gap: 8px;
   padding: 13px 18px;
   border-top: 1px solid var(--border);
-  border-radius: 0 0 12px 12px;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   background: var(--surface-2);
 }
 
 .viewer {
-  background: rgb(10 10 12 / 85%);
+  background: rgb(11 14 19 / 85%);
   cursor: zoom-out;
 }
 .viewer img {
@@ -1557,12 +1619,12 @@ h6.md-h {
 }
 .viewer-close,
 .viewer-nav {
-  background: rgb(10 10 12 / 55%);
-  color: #ececef;
+  background: rgb(11 14 19 / 55%);
+  color: #f8f9fb;
 }
 .viewer-close:hover:not(:disabled),
 .viewer-nav:hover:not(:disabled) {
-  background: rgb(10 10 12 / 80%);
+  background: rgb(11 14 19 / 80%);
   color: #ffffff;
 }
 .viewer-close {
@@ -1597,8 +1659,8 @@ h6.md-h {
   transform: translateX(-50%);
   padding: 3px 10px;
   border-radius: 999px;
-  background: rgb(10 10 12 / 70%);
-  color: #ececef;
+  background: rgb(11 14 19 / 70%);
+  color: #f8f9fb;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
@@ -1619,7 +1681,7 @@ h6.md-h {
   border: 1px solid var(--border-strong);
   border-left: 3px solid var(--accent);
   border-radius: var(--radius-sm);
-  background: var(--surface);
+  background: var(--glass);
   box-shadow: var(--shadow);
   font-size: 13.5px;
   animation: rise 0.15s ease-out;
@@ -1649,7 +1711,7 @@ h6.md-h {
   width: min(400px, 100%);
   padding: 32px;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow);
 }
@@ -1697,16 +1759,18 @@ h6.md-h {
   .shell.sidebar-collapsed {
     grid-template-columns: minmax(0, 1fr);
   }
+  :root {
+    --topbar-height: 52px;
+  }
   /* The sidebar becomes an off-screen drawer. */
   .sidebar {
     position: fixed;
-    top: 0;
-    left: 0;
+    inset: 0 auto 0 0;
     z-index: 60;
     width: min(300px, 86vw);
-    height: 100%;
+    margin: 8px;
     box-shadow: var(--shadow);
-    transform: translateX(-101%);
+    transform: translateX(calc(-100% - 16px));
     /* Also hidden, so Tab cannot reach it. */
     visibility: hidden;
     transition:
@@ -1724,7 +1788,9 @@ h6.md-h {
     position: fixed;
     inset: 0;
     z-index: 50;
-    background: rgb(23 23 26 / 42%);
+    background: var(--veil);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.18s ease;
@@ -1743,7 +1809,6 @@ h6.md-h {
   }
   .topbar {
     padding: 8px;
-    min-height: 52px;
   }
   /* New chat on the far right, as in phone chat apps. */
   .topbar .when-collapsed-or-narrow {

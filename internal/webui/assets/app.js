@@ -576,7 +576,7 @@ function accountMenu(anchor) {
     },
     {
       label: "Keera Gateway",
-      icon: icons.external,
+      icon: icons.shield,
       href: app.me.gateway_url + "/access",
     },
     { label: "Help", icon: icons.help, href: "https://docs.keera.ch/use/chat" },
