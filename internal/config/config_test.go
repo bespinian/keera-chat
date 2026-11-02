@@ -56,6 +56,7 @@ func TestRefused(t *testing.T) {
 		"tiny body":        {"KEERA_CHAT_MAX_BODY_BYTES", "100", "at least"},
 		"no port, no URL":  {"KEERA_CHAT_ADDR", "unix-socket", "KEERA_CHAT_PUBLIC_URL is required"},
 		"internal garbage": {"KEERA_CHAT_GATEWAY_INTERNAL_URL", "gateway:8080", "KEERA_CHAT_GATEWAY_INTERNAL_URL"},
+		"agents path":      {"KEERA_CHAT_AGENTS_INTERNAL_URL", "http://agents:8070/api", "without a path"},
 		"log level":        {"KEERA_CHAT_LOG_LEVEL", "verbose", "debug, info, warn or error"},
 		"log format":       {"KEERA_CHAT_LOG_FORMAT", "yaml", "text or json"},
 	} {

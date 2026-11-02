@@ -26,6 +26,7 @@ import {
   count,
   setTitle,
   idpMark,
+  agentIcon,
 } from "./ui.js";
 
 setTheme(theme());
@@ -40,12 +41,13 @@ const app = {
   chats: null,
   conversations: [],
   settings: { instructions: "" },
-  // The model and key for the next message.
+  // The next message's model and key, { model, key }, or its agent, { agent }.
   choice: null,
   view: null,
   // Streaming replies by conversation id. See chat.js.
   live: new Map(),
   choose,
+  chooseAgent,
   saw,
   go,
 };
@@ -53,10 +55,12 @@ const app = {
 /* ------------------------------------------------------------------ boot */
 
 async function boot() {
+  keepAskedAgent();
   whenSignedOut(signIn);
   try {
     app.me = await api.me();
     for (const m of app.me.models) m.name ||= m.alias;
+    app.me.agents ||= [];
     app.chats = chats(app.me.user.id + "|" + app.me.user.org_id);
     await loadChats();
   } catch (err) {
@@ -69,9 +73,10 @@ async function boot() {
   shell();
   route();
   window.addEventListener("popstate", route);
-  // A reply is saved only once complete, so warn before leaving.
+  // A reply is saved only once complete, so warn before leaving. An agent's
+  // task is picked up again on return.
   window.addEventListener("beforeunload", (e) => {
-    if (app.live.size) e.preventDefault();
+    if ([...app.live.values()].some((l) => !l.reply.task)) e.preventDefault();
   });
 }
 
@@ -229,7 +234,13 @@ function shell() {
     ),
     h("div", { class: "search" }, icon(icons.search), els.search),
     els.list,
-    h("p", { class: "conv-hint" }, "For privacy, your chats are stored in this browser and never on the server."),
+    h(
+      "p",
+      { class: "conv-hint" },
+      app.me.agents.length
+        ? "For privacy, your chats are stored in this browser. Agents also keep their chats with you."
+        : "For privacy, your chats are stored in this browser and never on the server.",
+    ),
     h("div", { class: "sidebar-foot" }, els.account),
   );
 
@@ -300,25 +311,60 @@ function route() {
   const m = location.pathname.match(/^\/c\/(c[0-9a-f]{24})$/);
   const id = m ? m[1] : null;
   if (!m && location.pathname !== "/") history.replaceState(null, "", "/");
+  else if (location.search) history.replaceState(null, "", location.pathname);
   setNav(false);
   // Already shown: a new chat that just got its id, or the same link.
   if (app.view && id && app.view.id === id) return;
   if (app.view) app.view.destroy();
   app.view = chatView(app, id);
+  const agent = id ? null : takeAskedAgent();
+  if (agent) {
+    app.chooseAgent(agent);
+    app.view.render();
+  }
   replace(els.main, app.view.el);
   paintList();
   // Not on phones, where focus opens the keyboard.
   if (matchMedia("(min-width: 769px)").matches) app.view.focus();
 }
 
+// A link such as /?agent=<id>, from an agent's page in Keera Agents, starts a
+// chat with that agent. The sign-in drops the query, so the id waits in this
+// tab's session storage until a new chat takes it.
+const askedAgent = "keera.chat.agent";
+
+function keepAskedAgent() {
+  const id = new URLSearchParams(location.search).get("agent");
+  if (!id) return;
+  try {
+    sessionStorage.setItem(askedAgent, id);
+  } catch {
+    // Without storage, the link only works when already signed in.
+    app.askedAgent = id;
+  }
+}
+
+function takeAskedAgent() {
+  let id = app.askedAgent;
+  app.askedAgent = null;
+  try {
+    id ||= sessionStorage.getItem(askedAgent);
+    sessionStorage.removeItem(askedAgent);
+  } catch {
+    // See keepAskedAgent.
+  }
+  return id;
+}
+
 /* ------------------------------------------------------------------ model */
 
 /** choose sets the model and key for the next message: the ones asked for
- *  if still allowed, else the last picked, else the first. */
+ *  if still allowed, else the last picked, else the first. Someone with
+ *  agents but no model gets the first agent. */
 function choose(alias, keyID) {
   const models = app.me.models;
   if (!models.length) {
-    app.choice = null;
+    app.choice = app.me.agents.length ? { agent: app.me.agents[0] } : null;
     paintPicker();
     return;
   }
@@ -331,6 +377,15 @@ function choose(alias, keyID) {
   paintPicker();
 }
 
+/** chooseAgent sends the next message to an agent. One no longer offered
+ *  falls back to a model. */
+function chooseAgent(id) {
+  const agent = app.me.agents.find((a) => a.id === id);
+  if (!agent) return choose(null, null);
+  app.choice = { agent };
+  paintPicker();
+}
+
 function keysFor(alias) {
   return app.me.keys.filter((k) => k.models.includes(alias));
 }
@@ -339,28 +394,64 @@ function paintPicker() {
   const c = app.choice;
   els.picker.hidden = !c;
   if (!c) return;
-  replace(els.picker, h("span", { class: "model-picker-name" }, c.model.name), icon(icons.chevronDown));
+  replace(
+    els.picker,
+    c.agent ? icon(agentIcon(c.agent.icon)) : null,
+    h("span", { class: "model-picker-name" }, (c.agent || c.model).name),
+    icon(icons.chevronDown),
+  );
 }
 
+/** modelMenu offers the models, and in a new chat the agents too. An agent
+ *  keeps a chat's history itself, so a chat stays with the agent it began
+ *  with, and a chat with a model stays with models. */
 function modelMenu(anchor) {
   const c = app.choice;
   if (!c) return;
+  const started = app.view?.started();
+  if (started && c.agent) {
+    menu(
+      anchor,
+      [
+        { heading: `This chat is with ${c.agent.name}` },
+        { label: "New chat", icon: icons.newChat, onClick: () => go(null, "/") },
+      ],
+      { wide: true },
+    );
+    return;
+  }
   const items = app.me.models.map((m) => ({
     label: m.name,
     hint: m.router
       ? m.description || "Picks a model for each message"
       : m.description || (m.name !== m.alias ? m.alias : ""),
     icon: m.router ? icons.router : icons.sparkle,
-    checked: m.alias === c.model.alias,
+    checked: m.alias === c.model?.alias,
     onClick: () => {
       remember("model", m.alias);
       choose(m.alias);
       app.view?.render();
     },
   }));
+  if (!started && app.me.agents.length) {
+    if (items.length) items.push({ separator: true });
+    items.push({ heading: "Agents" });
+    for (const a of app.me.agents) {
+      items.push({
+        label: a.name,
+        hint: a.description || "Works with its own tools and workspace",
+        icon: agentIcon(a.icon),
+        checked: a.id === c.agent?.id,
+        onClick: () => {
+          chooseAgent(a.id);
+          app.view?.render();
+        },
+      });
+    }
+  }
   // With several keys, the person picks which one pays. Each has its own
   // budget and rules.
-  const keys = keysFor(c.model.alias);
+  const keys = c.model ? keysFor(c.model.alias) : [];
   if (keys.length > 1) {
     items.push({ separator: true }, { heading: "Send with key" });
     for (const k of keys) {
@@ -544,7 +635,7 @@ function accountMenu(anchor) {
   const items = [
     h("div", { class: "menu-who" }, h("strong", {}, u.name || u.email), u.name ? h("span", {}, u.email) : null),
   ];
-  const b = app.choice?.key.budget;
+  const b = app.choice?.key?.budget;
   if (b) items.push(budgetEl(b));
   items.push({ separator: true });
 

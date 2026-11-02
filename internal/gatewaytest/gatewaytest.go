@@ -36,6 +36,7 @@ type Gateway struct {
 	lastClient string
 	chats      int
 	streaming  int
+	agentsURL  string
 }
 
 func New() *Gateway {
@@ -68,6 +69,14 @@ func (g *Gateway) Streaming() int {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.streaming
+}
+
+// ConnectAgents names Keera Agents' address, as a gateway with
+// KEERA_AGENTS_URL does.
+func (g *Gateway) ConnectAgents(url string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.agentsURL = url
 }
 
 // Revoke ends every sign-in.
@@ -183,12 +192,13 @@ func (g *Gateway) authed(next http.HandlerFunc) http.HandlerFunc {
 
 func (g *Gateway) me(w http.ResponseWriter, r *http.Request) {
 	g.mu.Lock()
-	org := g.orgID
+	org, agentsURL := g.orgID, g.agentsURL
 	g.mu.Unlock()
 	names := map[string]string{OrgID: "Example AG", "org_lab": "Example Lab"}
 	writeJSON(w, 200, map[string]any{
 		"user_id": UserID, "email": "ada@example.ch",
 		"name": "Ada Lovelace", "role": "member", "org_id": org, "org_name": names[org],
+		"agents_url": agentsURL,
 		"orgs": []map[string]any{
 			{"org_id": OrgID, "org_name": "Example AG", "role": "member"},
 			{"org_id": "org_lab", "org_name": "Example Lab", "role": "member"},

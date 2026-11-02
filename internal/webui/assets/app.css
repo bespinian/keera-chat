@@ -735,6 +735,20 @@ code {
   text-align: center;
 }
 /* The portrait is transparent, so this circle keeps it round in both themes. */
+/* An agent's icon, as Keera Agents shows it. */
+.avatar-sm {
+  width: 20px;
+  height: 20px;
+  font-size: 9px;
+}
+.avatar-sm svg {
+  width: 12px;
+  height: 12px;
+}
+.avatar-agent {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
 .hero-mark {
   display: block;
   margin-bottom: 4px;
@@ -742,6 +756,16 @@ code {
   background: var(--accent-soft);
   box-shadow: 0 0 0 1px var(--border);
   object-fit: cover;
+}
+/* An agent's icon in place of Keera's mark, the size of the image. */
+.hero-agent {
+  display: grid;
+  width: 80px;
+  height: 80px;
+}
+.hero-agent svg {
+  width: 40px;
+  height: 40px;
 }
 .hero-title {
   font: 600 30px/1.2 var(--display);
@@ -864,6 +888,12 @@ code {
   font-size: 12px;
   color: var(--faint);
 }
+/* An agent's name under its reply, with its icon. */
+.msg-agent {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 .msg-note {
   margin-top: 6px;
   font-size: 13px;
@@ -932,6 +962,11 @@ code {
   color: var(--muted);
   max-height: 360px;
   overflow-y: auto;
+}
+/* The tools an agent used. */
+.agent-steps {
+  padding-left: 20px;
+  white-space: normal;
 }
 .shimmer {
   background: linear-gradient(
@@ -1830,6 +1865,10 @@ h6.md-h {
   .hero-mark {
     width: 64px;
     height: 64px;
+  }
+  .hero-agent svg {
+    width: 32px;
+    height: 32px;
   }
   .bubble {
     max-width: 92%;

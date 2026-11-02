@@ -178,6 +178,9 @@ type Me struct {
 	OrgID   string       `json:"org_id"`
 	OrgName string       `json:"org_name"`
 	Orgs    []Membership `json:"orgs"`
+	// AgentsURL is Keera Agents' address as a browser reaches it, when the
+	// gateway has one connected. Empty without.
+	AgentsURL string `json:"agents_url"`
 }
 
 type Membership struct {

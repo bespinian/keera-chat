@@ -46,6 +46,13 @@ any other request, and the person needs nothing but a browser.
   in the browser they chat in. Keera Chat itself keeps nothing, so it needs
   no volume and no backup. People can export their chats to a file and import
   them in another browser.
+- **Chats with agents.** When the gateway has Keera Agents connected, the
+  model menu of a new chat also lists the person's agents. An agent works with
+  its own tools and workspace, so a reply can take minutes. Chat waits as for
+  a model, then shows the answer with the tools the agent used, and picks the
+  reply up again if the page closed.
+  Agents take text only. A link to `/?agent=<id>`, such as the **Chat**
+  button on an agent's page in Keera Agents, starts a chat with that agent.
 - **Shows the budget before it runs out.** The account menu shows how much of
   the tightest budget above the person's key is spent. A refusal, such as a
   spent budget, shows in the conversation in the gateway's own words.
@@ -119,6 +126,7 @@ some other workflow in the repository. Each release also has the image's SBOM.
 | `KEERA_CHAT_SECRET_KEY`           | required                  | Encrypts the session cookie. At least 16 characters. Changing it signs everyone out.                                 |
 | `KEERA_CHAT_PUBLIC_URL`           | `http://127.0.0.1:<port>` | Keera Chat's address as a browser reaches it. Must match `KEERA_CHAT_URL` on the gateway.                            |
 | `KEERA_CHAT_GATEWAY_INTERNAL_URL` | `KEERA_CHAT_GATEWAY_URL`  | Where Keera Chat itself reaches the gateway, where that differs, such as `http://gateway:8080` on a compose network. |
+| `KEERA_CHAT_AGENTS_INTERNAL_URL`  | the gateway's             | Where Keera Chat itself reaches Keera Agents, where that differs from the gateway's `KEERA_AGENTS_URL`.              |
 | `KEERA_CHAT_ADDR`                 | `:8090`                   | The listener.                                                                                                        |
 | `KEERA_CHAT_SECURE_COOKIES`       | follows the scheme        | Marks the session cookie `Secure`. On when `KEERA_CHAT_PUBLIC_URL` is https.                                         |
 | `KEERA_CHAT_MAX_BODY_BYTES`       | `33554432` (32 MiB)       | The largest message, at least 1 MiB. Each message brings its whole conversation, images included.                    |
@@ -146,6 +154,10 @@ empty model menu.
   Keera Chat, which passes it to the gateway and keeps none of it. They are
   kept per person and organisation, as the gateway keeps keys and spend, so
   people who share a browser do not see each other's chats.
+- **Chats with an agent** are kept in the browser too, and the agent keeps
+  their history in its workspace, as it does for any chat. Chat sends each
+  message to Keera Agents with the person's sign-in, and Keera Agents keeps it
+  as a task, with what the agent did, for 90 days.
 - **The gateway stores no conversation**, as for any other client. Its audit log
   and usage record each request as they do for every client.
 - **No token, conversation or message is logged here.** A request is logged

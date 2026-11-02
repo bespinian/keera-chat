@@ -84,10 +84,11 @@ export function chats(owner) {
         title: conv.title,
         model: conv.model,
         key_id: conv.key_id,
+        agent: conv.agent,
         created_at: conv.created_at,
         updated_at: conv.updated_at,
         // Drop view-only fields.
-        messages: conv.messages.map(({ streaming, showReasoning, ...m }) => m),
+        messages: conv.messages.map(({ streaming, showReasoning, showSteps, ...m }) => m),
       };
       await run(["conversations", "summaries"], "readwrite", (t) => keep(t, kept));
       keepForGood();
@@ -239,6 +240,7 @@ function conversation(c) {
     title: text(c.title) || "Imported chat",
     model: text(c.model),
     key_id: text(c.key_id),
+    agent: text(c.agent),
     created_at: time(c.created_at) || updated,
     updated_at: updated,
     messages: c.messages.map(message),
@@ -286,9 +288,10 @@ function message(m) {
     }
     kept.files = m.files.map(({ name, text }) => ({ name, text }));
   }
-  for (const k of ["model", "reasoning", "error", "error_detail", "finish"]) {
+  for (const k of ["model", "agent", "task", "reasoning", "error", "error_detail", "finish"]) {
     if (m[k]) kept[k] = text(m[k]);
   }
+  if (Array.isArray(m.steps)) kept.steps = m.steps.filter((s) => typeof s === "string");
   if (m.stopped === true) kept.stopped = true;
   if (Number.isSafeInteger(m.tokens) && m.tokens > 0) kept.tokens = m.tokens;
   if (time(m.created_at)) kept.created_at = time(m.created_at);

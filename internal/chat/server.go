@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bespinian/keera-chat/internal/agents"
 	"github.com/bespinian/keera-chat/internal/gateway"
 	"github.com/bespinian/keera-chat/internal/secret"
 	"github.com/bespinian/keera-chat/internal/version"
@@ -25,20 +26,24 @@ type Options struct {
 	GatewayURL    string
 	SecureCookies bool
 	MaxBodyBytes  int64
+	// AgentsInternalURL replaces the address the gateway names for Keera
+	// Agents, where chat reaches it another way.
+	AgentsInternalURL string
 }
 
 type Server struct {
-	opts Options
-	gw   *gateway.Client
-	box  *secret.Box
-	log  *slog.Logger
+	opts   Options
+	gw     *gateway.Client
+	agents *agents.Client
+	box    *secret.Box
+	log    *slog.Logger
 
 	who whoCache
 }
 
 func New(opts Options, gw *gateway.Client, box *secret.Box, log *slog.Logger) *Server {
 	return &Server{
-		opts: opts, gw: gw, box: box, log: log,
+		opts: opts, gw: gw, agents: agents.New(), box: box, log: log,
 		who: whoCache{entries: map[string]whoEntry{}},
 	}
 }
@@ -61,6 +66,9 @@ func (s *Server) Handler() http.Handler {
 	api("GET /api/me", s.me)
 	api("POST /api/org", s.switchOrg)
 	api("POST /api/chat", s.reply)
+	api("POST /api/agents/{id}/messages", s.tellAgent)
+	api("GET /api/agents/tasks/{id}", s.agentTask)
+	api("POST /api/agents/tasks/{id}/cancel", s.cancelAgentTask)
 
 	// Unknown API paths get a JSON 404, not the page.
 	notFound := func(w http.ResponseWriter, r *http.Request) {

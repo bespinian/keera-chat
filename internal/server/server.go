@@ -50,6 +50,8 @@ func Run() error {
 		GatewayURL:    cfg.GatewayURL,
 		SecureCookies: cfg.SecureCookies,
 		MaxBodyBytes:  cfg.MaxBodyBytes,
+
+		AgentsInternalURL: cfg.AgentsInternalURL,
 	}, gw, box, log)
 
 	srv := &http.Server{

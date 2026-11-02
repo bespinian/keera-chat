@@ -27,6 +27,10 @@ type Config struct {
 	// compose network. Defaults to GatewayURL.
 	GatewayInternalURL string
 
+	// AgentsInternalURL is how chat reaches Keera Agents, where that differs
+	// from the address the gateway names for it. Empty uses that address.
+	AgentsInternalURL string
+
 	// SecretKey seals chat's cookies. Changing it signs everyone out.
 	SecretKey string
 
@@ -70,6 +74,10 @@ func load(getenv func(string) string) (Config, error) {
 			"reaches Keera Gateway on, such as https://keera.example.ch")
 	}
 	if c.GatewayInternalURL, err = originEnv("KEERA_CHAT_GATEWAY_INTERNAL_URL", c.GatewayURL); err != nil {
+		return c, err
+	}
+
+	if c.AgentsInternalURL, err = originEnv("KEERA_CHAT_AGENTS_INTERNAL_URL", ""); err != nil {
 		return c, err
 	}
 
