@@ -222,6 +222,40 @@ func TestMe(t *testing.T) {
 	}
 }
 
+// The person is cached for a minute. Switching must not wait for that.
+func TestSwitchOrg(t *testing.T) {
+	h := newHarness(t)
+	h.signIn()
+	orgOf := func() string {
+		var me struct {
+			User struct {
+				OrgID string `json:"org_id"`
+			}
+		}
+		if got := h.do("GET", "/api/me", &me); got != 200 {
+			t.Fatalf("GET /api/me = %d", got)
+		}
+		return me.User.OrgID
+	}
+	if got := orgOf(); got != gatewaytest.OrgID {
+		t.Fatalf("org = %s before switching", got)
+	}
+
+	req, _ := http.NewRequest("POST", h.chat.URL+"/api/org", strings.NewReader(`{"org_id":"org_lab"}`))
+	req.Header.Set("X-Keera-Chat", "1")
+	res, err := h.c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("POST /api/org = %d", res.StatusCode)
+	}
+	if got := orgOf(); got != "org_lab" {
+		t.Errorf("org = %s after switching, want org_lab at once", got)
+	}
+}
+
 func TestCrossSiteRefused(t *testing.T) {
 	h := newHarness(t)
 	h.signIn()

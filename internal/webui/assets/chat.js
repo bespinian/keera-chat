@@ -38,7 +38,6 @@ const cutOff = "The reply was cut off before it finished. Try again.";
 const followEvery = 1500;
 
 export function chatView(app, id) {
-  // pending is a reply to a new chat with no id yet.
   const view = {
     id,
     el: null,
@@ -49,6 +48,7 @@ export function chatView(app, id) {
     // started is true once the chat has messages.
     started: () => !!conv?.messages.length,
     destroy,
+    // pending is a reply to a new chat with no id yet.
     pending: null,
   };
   // gone means the view was left.
@@ -168,7 +168,6 @@ export function chatView(app, id) {
         submit();
       },
       onClick: (e) => {
-        // Clicking anywhere in the box focuses the field.
         if (e.target === composer) input.focus();
       },
     },
@@ -503,31 +502,6 @@ export function chatView(app, id) {
       body.append(md);
     }
 
-    if (m.agent) return agentReplyEl(m, i, body, canRetry);
-
-    const actions =
-      !m.streaming &&
-      h(
-        "div",
-        { class: "msg-actions" + (last ? " is-last" : "") },
-        copyButton(m),
-        m.reasoning
-          ? iconButton(
-              icons.thought,
-              m.showReasoning ? "Hide the thought process" : "Show the thought process",
-              (e) => {
-                m.showReasoning = !m.showReasoning;
-                const node = replyEl(m, i);
-                e.currentTarget.closest(".msg").replaceWith(node);
-                node.querySelector(".reasoning")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-              },
-              { "aria-expanded": m.showReasoning ? "true" : "false" },
-            )
-          : null,
-        canRetry && !m.error ? iconButton(icons.retry, "Answer again", () => send({ regenerate: true })) : null,
-        h("span", { class: "msg-model" }, modelName(app, m.model)),
-      );
-
     return h(
       "div",
       { class: "msg" },
@@ -535,17 +509,93 @@ export function chatView(app, id) {
       m.error ? errorEl(m, canRetry) : null,
       m.stopped ? h("div", { class: "msg-note" }, "Stopped.") : null,
       m.finish === "length" ? h("div", { class: "msg-note" }, "The reply reached its length limit.") : null,
-      actions,
-      // Below the actions, so it opens where the person clicked.
-      actions && m.reasoning && m.showReasoning
-        ? h(
-            "div",
-            { class: "reasoning" },
-            h("div", { class: "reasoning-head" }, "Thought process"),
-            h("div", { class: "reasoning-body" }, m.reasoning),
+      m.agent ? agentTail(m, i, last) : modelTail(m, i, last, canRetry),
+    );
+  }
+
+  /** modelTail is a model reply's actions and its thought process. */
+  function modelTail(m, i, last, canRetry) {
+    if (m.streaming) return null;
+    return [
+      actionsEl(
+        last,
+        copyButton(m),
+        m.reasoning ? foldButton(m, i, "showReasoning", icons.thought, "the thought process") : null,
+        canRetry && !m.error ? iconButton(icons.retry, "Answer again", () => send({ regenerate: true })) : null,
+        h("span", { class: "msg-model" }, modelName(app, m.model)),
+      ),
+      m.reasoning && m.showReasoning
+        ? fold("Thought process", h("div", { class: "reasoning-body" }, m.reasoning))
+        : null,
+    ];
+  }
+
+  /** agentTail is an agent reply's actions and its steps. The task opens in
+   *  Keera Agents with everything it did. */
+  function agentTail(m, i, last) {
+    if (m.streaming || waiting(m)) return null;
+    const steps = m.steps?.length ? m.steps : null;
+    return [
+      actionsEl(
+        last,
+        copyButton(m),
+        steps ? foldButton(m, i, "showSteps", icons.steps, "the steps") : null,
+        app.me.agents_url && m.task
+          ? h(
+              "a",
+              {
+                class: "icon-btn",
+                href: `${app.me.agents_url}/tasks/${encodeURIComponent(m.task)}`,
+                target: "_blank",
+                rel: "noopener",
+                title: "Open in Keera Agents",
+                "aria-label": "Open in Keera Agents",
+              },
+              icon(icons.external),
+            )
+          : null,
+        h(
+          "span",
+          { class: "msg-model msg-agent" },
+          agentMark(agentOf(app, m.agent)?.icon, "avatar-sm"),
+          agentName(app, m.agent),
+        ),
+      ),
+      steps && m.showSteps
+        ? fold(
+            "Steps",
+            h(
+              "ol",
+              { class: "reasoning-body agent-steps" },
+              steps.map((step) => h("li", {}, step)),
+            ),
           )
         : null,
+    ];
+  }
+
+  function actionsEl(last, ...buttons) {
+    return h("div", { class: "msg-actions" + (last ? " is-last" : "") }, ...buttons);
+  }
+
+  /** foldButton shows or hides one of a reply's folds, such as m.showSteps. */
+  function foldButton(m, i, key, glyph, what) {
+    return iconButton(
+      glyph,
+      `${m[key] ? "Hide" : "Show"} ${what}`,
+      (e) => {
+        m[key] = !m[key];
+        const node = replyEl(m, i);
+        e.currentTarget.closest(".msg").replaceWith(node);
+        node.querySelector(".reasoning")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      },
+      { "aria-expanded": m[key] ? "true" : "false" },
     );
+  }
+
+  /** fold goes below the actions, so it opens where the person clicked. */
+  function fold(head, body) {
+    return h("div", { class: "reasoning" }, h("div", { class: "reasoning-head" }, head), body);
   }
 
   function errorEl(m, canRetry) {
@@ -571,73 +621,6 @@ export function chatView(app, id) {
             },
             icon(icons.retry),
             "Try again",
-          )
-        : null,
-    );
-  }
-
-  /** agentReplyEl is an agent's answer. The tools it used fold away, and its
-   *  task opens in Keera Agents with everything it did. */
-  function agentReplyEl(m, i, body, canRetry) {
-    const steps = m.steps?.length ? m.steps : null;
-    const actions =
-      !m.streaming &&
-      !waiting(m) &&
-      h(
-        "div",
-        { class: "msg-actions" + (i === conv.messages.length - 1 ? " is-last" : "") },
-        copyButton(m),
-        steps
-          ? iconButton(
-              icons.steps,
-              m.showSteps ? "Hide the steps" : "Show the steps",
-              (e) => {
-                m.showSteps = !m.showSteps;
-                const node = replyEl(m, i);
-                e.currentTarget.closest(".msg").replaceWith(node);
-                node.querySelector(".reasoning")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-              },
-              { "aria-expanded": m.showSteps ? "true" : "false" },
-            )
-          : null,
-        app.me.agents_url && m.task
-          ? h(
-              "a",
-              {
-                class: "icon-btn",
-                href: `${app.me.agents_url}/tasks/${encodeURIComponent(m.task)}`,
-                target: "_blank",
-                rel: "noopener",
-                title: "Open in Keera Agents",
-                "aria-label": "Open in Keera Agents",
-              },
-              icon(icons.external),
-            )
-          : null,
-        h(
-          "span",
-          { class: "msg-model msg-agent" },
-          agentMark(agentOf(app, m.agent)?.icon, "avatar-sm"),
-          agentName(app, m.agent),
-        ),
-      );
-    return h(
-      "div",
-      { class: "msg" },
-      body,
-      m.error ? errorEl(m, canRetry) : null,
-      m.stopped ? h("div", { class: "msg-note" }, "Stopped.") : null,
-      actions,
-      actions && steps && m.showSteps
-        ? h(
-            "div",
-            { class: "reasoning" },
-            h("div", { class: "reasoning-head" }, "Steps"),
-            h(
-              "ol",
-              { class: "reasoning-body agent-steps" },
-              steps.map((step) => h("li", {}, step)),
-            ),
           )
         : null,
     );
@@ -776,20 +759,12 @@ export function chatView(app, id) {
           showReasoning: false,
         };
     target.messages.push(reply);
-    const state = {
-      conv: target,
-      reply,
-      abort: new AbortController(),
-    };
+    const state = liveState(target, reply);
     if (target.id) app.live.set(target.id, state);
     else view.pending = state;
     pinned = true;
     render();
-
-    const paintOwner = () => {
-      const v = app.view;
-      if (v && (v.id === target.id || v.pending === state)) v.paint();
-    };
+    const paintOwner = painter(target, state);
 
     // Until the server accepts the message, nothing is saved and the
     // conversation can be rolled back.
@@ -890,16 +865,7 @@ export function chatView(app, id) {
       reply.streaming = false;
       // Do not bring back a chat deleted while its reply arrived.
       const keep = started && !state.deleted;
-      if (keep) {
-        reply.created_at ||= new Date().toISOString();
-        target.updated_at = new Date().toISOString();
-        try {
-          await app.chats.save(target);
-        } catch (err) {
-          reply.error = `The reply could not be kept. Copy anything you need from it now. ${err.message}`;
-          reply.error_detail = undefined;
-        }
-      }
+      if (keep) await saveReply(target, reply);
       // Only after saving, so the next message cannot start from before it.
       if (target.id) app.live.delete(target.id);
       if (view.pending === state) view.pending = null;
@@ -921,7 +887,6 @@ export function chatView(app, id) {
       target.created_at = now;
       app.live.set(target.id, state);
       if (view.pending === state) view.pending = null;
-      // Update the URL, unless the person already left.
       if (app.view === view) {
         view.id = target.id;
         history.replaceState(null, "", "/c/" + target.id);
@@ -949,11 +914,8 @@ export function chatView(app, id) {
   /** resume follows an agent's reply that was still being worked on when
    *  the page closed. Another tab may follow it already. */
   function resume(target, reply) {
-    const state = { conv: target, reply, abort: new AbortController() };
-    const paintOwner = () => {
-      const v = app.view;
-      if (v && v.id === target.id) v.paint();
-    };
+    const state = liveState(target, reply);
+    const paintOwner = painter(target, state);
     exclusive(
       target.id,
       async () => {
@@ -971,13 +933,7 @@ export function chatView(app, id) {
         } finally {
           reply.streaming = false;
           if (!state.deleted) {
-            target.updated_at = new Date().toISOString();
-            reply.created_at ||= target.updated_at;
-            try {
-              await app.chats.save(target);
-            } catch (err) {
-              reply.error = `The reply could not be kept. Copy anything you need from it now. ${err.message}`;
-            }
+            await saveReply(target, reply);
             app.saw(summary(target));
           }
           app.live.delete(target.id);
@@ -987,6 +943,31 @@ export function chatView(app, id) {
       },
       () => {},
     );
+  }
+
+  /** liveState is a reply being written, as app.live holds it. */
+  function liveState(target, reply) {
+    return { conv: target, reply, abort: new AbortController() };
+  }
+
+  /** painter repaints whichever view shows the reply, if any. */
+  function painter(target, state) {
+    return () => {
+      const v = app.view;
+      if (v && (v.id === target.id || v.pending === state)) v.paint();
+    };
+  }
+
+  /** saveReply keeps a finished reply. If storage fails, the reply says so. */
+  async function saveReply(target, reply) {
+    target.updated_at = new Date().toISOString();
+    reply.created_at ||= target.updated_at;
+    try {
+      await app.chats.save(target);
+    } catch (err) {
+      reply.error = `The reply could not be kept. Copy anything you need from it now. ${err.message}`;
+      reply.error_detail = undefined;
+    }
   }
 
   /** retitle applies a sidebar rename, so the next save keeps it. */
@@ -1231,9 +1212,7 @@ function accessNotice(app) {
   return h("div", { class: "notice" }, h("strong", {}, title), h("p", {}, body));
 }
 
-/** splitThink pulls inline <think>…</think> out of a reply. Some chat
- *  templates open the tag in the prompt, so the reply only closes it. The
- *  server does the same for the finished reply. */
+/** splitThink is splitThink in turns.go, for a reply still streaming. */
 function splitThink(text) {
   const open = text.match(/^\s*<think>/);
   const end = text.indexOf("</think>");

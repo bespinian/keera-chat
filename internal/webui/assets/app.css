@@ -734,8 +734,6 @@ code {
   gap: 10px;
   text-align: center;
 }
-/* The portrait is transparent, so this circle keeps it round in both themes. */
-/* An agent's icon, as Keera Agents shows it. */
 .avatar-sm {
   width: 20px;
   height: 20px;
@@ -745,10 +743,12 @@ code {
   width: 12px;
   height: 12px;
 }
+/* An agent's icon, as Keera Agents shows it. */
 .avatar-agent {
   background: var(--accent-soft);
   color: var(--accent);
 }
+/* The portrait is transparent, so this circle keeps it round in both themes. */
 .hero-mark {
   display: block;
   margin-bottom: 4px;

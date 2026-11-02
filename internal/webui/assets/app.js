@@ -37,7 +37,6 @@ const root = document.getElementById("root");
 /** app is the state shared across the page. */
 const app = {
   me: null,
-  // See store.js.
   chats: null,
   conversations: [],
   settings: { instructions: "" },
