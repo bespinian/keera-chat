@@ -66,9 +66,9 @@ func (s *Server) Handler() http.Handler {
 	api("GET /api/me", s.me)
 	api("POST /api/org", s.switchOrg)
 	api("POST /api/chat", s.reply)
-	api("POST /api/agents/{id}/messages", s.tellAgent)
-	api("GET /api/agents/tasks/{id}", s.agentTask)
-	api("POST /api/agents/tasks/{id}/cancel", s.cancelAgentTask)
+	api("POST /api/agents/{id}/messages", s.withAgents(s.tellAgent))
+	api("GET /api/agents/tasks/{id}", s.withAgents(s.agentTask))
+	api("POST /api/agents/tasks/{id}/cancel", s.withAgents(s.cancelAgentTask))
 
 	// Unknown API paths get a JSON 404, not the page.
 	notFound := func(w http.ResponseWriter, r *http.Request) {

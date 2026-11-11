@@ -222,7 +222,7 @@ function parseExport(text) {
   return { conversations, instructions: text(file.instructions).slice(0, 8000) };
 }
 
-const idPattern = /^c[0-9a-f]{24}$/;
+export const idPattern = /^c[0-9a-f]{24}$/;
 // Must match internal/chat/turns.go, so imported chats can be sent.
 export const imageTypes = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 export const maxImages = 10;

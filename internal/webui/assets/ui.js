@@ -95,7 +95,7 @@ export const icons = {
   // Pen on a page, unlike pencil, which edits a message.
   newChat: "M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.4 2.6a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z",
   send: "M12 19V5M5 12l7-7 7 7",
-  stop: "M7 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z",
+  stop: "M7 7h10v10H7z",
   plus: "M12 5v14M5 12h14",
   close: "M18 6L6 18M6 6l12 12",
   file: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6",
@@ -106,30 +106,35 @@ export const icons = {
   retry: "M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5",
   more: "M5 12h.01M12 12h.01M19 12h.01",
   menu: "M3 6h18M3 12h18M3 18h18",
-  sidebar: "M3 4h18v16H3zM9 4v16",
+  collapse: "M11 17l-5-5 5-5M18 17l-5-5 5-5",
+  expand: "M13 17l5-5-5-5M6 17l5-5-5-5",
   search: "M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3",
   chevronDown: "M6 9l6 6 6-6",
   chevronLeft: "M15 18l-6-6 6-6",
   chevronRight: "M9 18l6-6-6-6",
-  arrowDown: "M12 5v14M19 12l-7 7-7-7",
+  down: "M12 5v14M19 12l-7 7-7-7",
   signout: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
   theme: "M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z",
   sliders: "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6",
   download: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3",
   upload: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12",
   shield: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM9 12l2 2 4-4",
-  help: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01",
+  docs: "M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z",
   orgs: "M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M9 13h.01M9 17h.01M15 9h.01M15 13h.01M15 17h.01",
   passkey:
     "M2.6 17.4A2 2 0 0 0 2 18.8V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.2a2 2 0 0 0 1.4-.6l.8-.8a6.5 6.5 0 1 0-4-4zM16.5 7.5h.01",
-  key: "M21 2l-2 2m-7.6 7.6a5 5 0 1 1-7.1 7.1 5 5 0 0 1 7.1-7.1zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3",
-  router: "M4 6h5l4 6h7M20 12l-3-3m3 3l-3 3M9 6l4 12h7",
+  // A house key: a round head with a hole, and a blade with teeth.
+  keys:
+    "M10.7 10.47L16.95 4.22h2.83v2.83l-1.06 1.06.35 1.77-1.77-.35.71 2.12" +
+    "-2.12-.71.71 2.12-2.13-.71-.94.95A6 6 0 1 1 10.7 10.47zM7.4 16.6h.01",
+  // One request in, one of several models out: a router.
+  route: "M3 12h4c3.5 0 4.5-7 9-7h5M3 12h4c3.5 0 4.5 7 9 7h5M18 2l3 3-3 3M18 16l3 3-3 3",
+  sparkle:
+    "M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z",
   // A checklist: the tools an agent used.
   steps: "M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01",
   external: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3",
   thought: "M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z",
-  sparkle:
-    "M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z",
 };
 
 /** iconButton is an icon-only button, labelled for screen readers and hover.

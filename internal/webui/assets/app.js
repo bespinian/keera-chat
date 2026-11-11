@@ -2,7 +2,7 @@
 
 import { api, ApiError, whenSignedOut } from "./api.js";
 import { chatView } from "./chat.js";
-import { chats } from "./store.js";
+import { chats, idPattern } from "./store.js";
 import {
   h,
   icon,
@@ -221,7 +221,7 @@ function shell() {
       "div",
       { class: "sidebar-head" },
       h("a", { class: "brand", href: "/", onClick: (e) => go(e, "/") }, brandMark(24), "Keera Chat"),
-      iconButton(icons.sidebar, "Close the sidebar", () => toggleSidebar(true), { class: "hide-narrow" }),
+      iconButton(icons.collapse, "Close the sidebar", () => toggleSidebar(true), { class: "hide-narrow" }),
       iconButton(icons.close, "Close the menu", () => setNav(false), { class: "show-narrow" }),
     ),
     h(
@@ -255,7 +255,7 @@ function shell() {
         "header",
         { class: "topbar" },
         iconButton(icons.menu, "Open the menu", () => setNav(true), { class: "show-narrow" }),
-        iconButton(icons.sidebar, "Open the sidebar", () => toggleSidebar(false), {
+        iconButton(icons.expand, "Open the sidebar", () => toggleSidebar(false), {
           class: "when-collapsed",
         }),
         iconButton(icons.newChat, "New chat", () => go(null, "/"), { class: "when-collapsed-or-narrow" }),
@@ -307,9 +307,9 @@ function go(e, path) {
 }
 
 function route() {
-  const m = location.pathname.match(/^\/c\/(c[0-9a-f]{24})$/);
-  const id = m ? m[1] : null;
-  if (!m && location.pathname !== "/") history.replaceState(null, "", "/");
+  const rest = location.pathname.match(/^\/c\/(.+)$/)?.[1];
+  const id = idPattern.test(rest) ? rest : null;
+  if (!id && location.pathname !== "/") history.replaceState(null, "", "/");
   else if (location.search) history.replaceState(null, "", location.pathname);
   setNav(false);
   // Already shown: a new chat that just got its id, or the same link.
@@ -424,7 +424,7 @@ function modelMenu(anchor) {
     hint: m.router
       ? m.description || "Picks a model for each message"
       : m.description || (m.name !== m.alias ? m.alias : ""),
-    icon: m.router ? icons.router : icons.sparkle,
+    icon: m.router ? icons.route : icons.sparkle,
     checked: m.alias === c.model?.alias,
     onClick: () => {
       remember("model", m.alias);
@@ -457,7 +457,7 @@ function modelMenu(anchor) {
       items.push({
         label: k.name,
         hint: k.project || "",
-        icon: icons.key,
+        icon: icons.keys,
         checked: k.id === c.key.id,
         onClick: () => {
           remember("key:" + c.model.alias, k.id);
@@ -669,7 +669,7 @@ function accountMenu(anchor) {
       icon: icons.shield,
       href: app.me.gateway_url + "/access",
     },
-    { label: "Help", icon: icons.help, href: "https://docs.keera.ch/use/chat" },
+    { label: "Help", icon: icons.docs, href: "https://docs.keera.ch/use/chat" },
     { separator: true },
     { label: "Export chats", icon: icons.download, onClick: exportChats },
     { label: "Import chats", icon: icons.upload, onClick: importChats },

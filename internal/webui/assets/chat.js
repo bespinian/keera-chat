@@ -80,7 +80,7 @@ export function chatView(app, id) {
         scroll.scrollTo({ top: scroll.scrollHeight, behavior: "smooth" });
       },
     },
-    icon(icons.arrowDown),
+    icon(icons.down),
   );
 
   const input = h("textarea", {
@@ -862,14 +862,8 @@ export function chatView(app, id) {
         reply.error = err?.message || "The reply ended unexpectedly.";
       }
     } finally {
-      reply.streaming = false;
-      // Do not bring back a chat deleted while its reply arrived.
-      const keep = started && !state.deleted;
-      if (keep) await saveReply(target, reply);
-      // Only after saving, so the next message cannot start from before it.
-      if (target.id) app.live.delete(target.id);
       if (view.pending === state) view.pending = null;
-      if (keep) app.saw(summary(target));
+      await settle(target, state, started);
       const v = app.view;
       if (changed && v === view) load();
       else if (v && (v === view || v.id === target.id)) v.render();
@@ -931,12 +925,7 @@ export function chatView(app, id) {
           reply.stopped = true;
           stopTask(reply);
         } finally {
-          reply.streaming = false;
-          if (!state.deleted) {
-            await saveReply(target, reply);
-            app.saw(summary(target));
-          }
-          app.live.delete(target.id);
+          await settle(target, state);
           const v = app.view;
           if (v && v.id === target.id) v.render();
         }
@@ -956,6 +945,18 @@ export function chatView(app, id) {
       const v = app.view;
       if (v && (v.id === target.id || v.pending === state)) v.paint();
     };
+  }
+
+  /** settle ends a reply: it saves it, unless save is false, and frees the
+   *  chat for the next message. */
+  async function settle(target, state, save = true) {
+    state.reply.streaming = false;
+    // Do not bring back a chat deleted while its reply arrived.
+    const keep = save && !state.deleted;
+    if (keep) await saveReply(target, state.reply);
+    // Only after saving, so the next message cannot start from before it.
+    if (target.id) app.live.delete(target.id);
+    if (keep) app.saw(summary(target));
   }
 
   /** saveReply keeps a finished reply. If storage fails, the reply says so. */

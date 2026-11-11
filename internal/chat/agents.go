@@ -18,6 +18,19 @@ func (s *Server) agentsBase(c *caller) string {
 	return cmp.Or(s.opts.AgentsInternalURL, c.me.AgentsURL)
 }
 
+// withAgents passes next the caller's Keera Agents address, or answers 404
+// when the gateway has none connected.
+func (s *Server) withAgents(next func(http.ResponseWriter, *http.Request, *caller, string)) handler {
+	return func(w http.ResponseWriter, r *http.Request, c *caller) {
+		base := s.agentsBase(c)
+		if base == "" {
+			writeError(w, http.StatusNotFound, "no_agents", "Keera Agents is not connected to this Keera Gateway")
+			return
+		}
+		next(w, r, c, base)
+	}
+}
+
 // offeredAgents lists the caller's agents for /api/me. A failure leaves them
 // out, so chat with models still works.
 func (s *Server) offeredAgents(r *http.Request, c *caller) ([]agents.Agent, error) {
@@ -69,12 +82,7 @@ func taskOut(t agents.Task, events []agents.Event, after int64) agentTask {
 
 // tellAgent sends a message to an agent and returns its task at once. The
 // page then follows it with agentTask, so a reply survives a reload.
-func (s *Server) tellAgent(w http.ResponseWriter, r *http.Request, c *caller) {
-	base := s.agentsBase(c)
-	if base == "" {
-		writeError(w, http.StatusNotFound, "no_agents", "Keera Agents is not connected to this Keera Gateway")
-		return
-	}
+func (s *Server) tellAgent(w http.ResponseWriter, r *http.Request, c *caller, base string) {
 	var in struct {
 		Conversation string `json:"conversation"`
 		Text         string `json:"text"`
@@ -90,12 +98,7 @@ func (s *Server) tellAgent(w http.ResponseWriter, r *http.Request, c *caller) {
 	writeJSON(w, http.StatusOK, taskOut(t, nil, 0))
 }
 
-func (s *Server) agentTask(w http.ResponseWriter, r *http.Request, c *caller) {
-	base := s.agentsBase(c)
-	if base == "" {
-		writeError(w, http.StatusNotFound, "no_agents", "Keera Agents is not connected to this Keera Gateway")
-		return
-	}
+func (s *Server) agentTask(w http.ResponseWriter, r *http.Request, c *caller, base string) {
 	after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
 	t, events, err := s.agents.Events(r.Context(), base, c.token, r.PathValue("id"), after)
 	if err != nil {
@@ -105,12 +108,7 @@ func (s *Server) agentTask(w http.ResponseWriter, r *http.Request, c *caller) {
 	writeJSON(w, http.StatusOK, taskOut(t, events, after))
 }
 
-func (s *Server) cancelAgentTask(w http.ResponseWriter, r *http.Request, c *caller) {
-	base := s.agentsBase(c)
-	if base == "" {
-		writeError(w, http.StatusNotFound, "no_agents", "Keera Agents is not connected to this Keera Gateway")
-		return
-	}
+func (s *Server) cancelAgentTask(w http.ResponseWriter, r *http.Request, c *caller, base string) {
 	t, err := s.agents.Cancel(r.Context(), base, c.token, r.PathValue("id"))
 	if err != nil {
 		s.gatewayFailed(w, r, err)
