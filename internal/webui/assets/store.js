@@ -199,10 +199,10 @@ const exportFormat = "keera-chat";
 
 /** parseExport validates an exported file's text and keeps only known
  *  fields. The file is untrusted. */
-function parseExport(text) {
+function parseExport(raw) {
   let file;
   try {
-    file = JSON.parse(text);
+    file = JSON.parse(raw);
   } catch {
     // Not JSON. Refused below.
   }
