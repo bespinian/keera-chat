@@ -167,8 +167,10 @@ empty model menu.
 Keeping chats in the browser has a price. They do not follow a person to
 another device or browser on their own: the person takes them along with
 **Export chats** and **Import chats** in the account menu. The file holds the
-chats, their images and the custom instructions, unencrypted. Importing keeps
-the chats already there, and replaces one only with a newer copy of it.
+chats, their images and the custom instructions, unencrypted. A single chat
+can be exported from its menu in the sidebar, to share it or move it; that file
+holds no instructions. Importing keeps the chats already there, and replaces
+one only with a newer copy of it. Pinned chats stay pinned.
 Chats are gone when the person clears the site's data, unless exported, and a
 private window forgets them when it closes. Signing out keeps
 them, so on a shared computer, delete them first under **Delete all chats**.

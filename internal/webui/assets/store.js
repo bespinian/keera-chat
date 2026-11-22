@@ -51,8 +51,9 @@ function reason(err) {
 
 /** keep writes a conversation and its summary together, so they match. */
 function keep(t, c) {
+  if (!c.pinned) delete c.pinned;
   t.objectStore("conversations").put(c);
-  t.objectStore("summaries").put({ ...summary(c), owner: c.owner });
+  t.objectStore("summaries").put({ ...summary(c), pinned: !!c.pinned, owner: c.owner });
 }
 
 function forget(t, id) {
@@ -90,7 +91,14 @@ export function chats(owner) {
         // Drop view-only fields.
         messages: conv.messages.map(({ streaming, showReasoning, showSteps, ...m }) => m),
       };
-      await run(["conversations", "summaries"], "readwrite", (t) => keep(t, kept));
+      // The sidebar pins a chat, not the open view, so keep the stored pin.
+      await run(["conversations", "summaries"], "readwrite", (t) => {
+        const req = t.objectStore("conversations").get(kept.id);
+        req.onsuccess = () => {
+          const here = req.result;
+          keep(t, { ...kept, pinned: here?.owner === owner && here.pinned });
+        };
+      });
       keepForGood();
     },
 
@@ -102,6 +110,19 @@ export function chats(owner) {
           const c = req.result;
           if (!c || c.owner !== owner) return;
           c.title = title;
+          keep(t, c);
+        };
+      });
+    },
+
+    /** pin keeps updated_at too. Pinned chats show first. */
+    pin(id, pinned) {
+      return run(["conversations", "summaries"], "readwrite", (t) => {
+        const req = t.objectStore("conversations").get(id);
+        req.onsuccess = () => {
+          const c = req.result;
+          if (!c || c.owner !== owner) return;
+          c.pinned = pinned;
           keep(t, c);
         };
       });
@@ -136,23 +157,23 @@ export function chats(owner) {
         };
         return t.objectStore("settings").get(owner);
       });
-      const conversations = all.sort(newestFirst).map(({ owner, ...c }) => c);
-      return {
-        format: exportFormat,
-        version: 1,
-        exported_at: new Date().toISOString(),
-        instructions: settings?.instructions || "",
-        conversations,
-      };
+      return exportFile(all.sort(newestFirst), settings?.instructions);
+    },
+
+    /** exportOne returns one chat as a file, without instructions. */
+    async exportOne(id) {
+      const c = await this.find(id);
+      if (!c) throw new Error("This chat is not in this browser anymore.");
+      return exportFile([c]);
     },
 
     /** importAll adds the chats of an exported file's text. A chat is
      *  replaced only by a newer copy, so importing twice adds nothing. Ids in
      *  skip are left alone. Instructions are taken only if the owner has
-     *  none. */
+     *  none. ids lists the chats added or updated. */
     async importAll(text, skip = new Set()) {
       const { conversations, instructions } = parseExport(text);
-      const result = { added: 0, updated: [] };
+      const result = { added: 0, updated: [], ids: [] };
       await run(["conversations", "summaries", "settings"], "readwrite", (t) => {
         for (const c of conversations) {
           if (skip.has(c.id)) continue;
@@ -162,11 +183,14 @@ export function chats(owner) {
             if (here && here.owner === owner) {
               if (here.updated_at >= c.updated_at) return;
               result.updated.push(c.id);
+              // A pin made here stays.
+              c.pinned ||= here.pinned;
             } else {
               // Another owner in this browser has the same chat.
               if (here) c.id = newID();
               result.added++;
             }
+            result.ids.push(c.id);
             keep(t, { ...c, owner });
           };
         }
@@ -196,6 +220,17 @@ export function chats(owner) {
 }
 
 const exportFormat = "keera-chat";
+
+/** exportFile leaves the owner out, so another organisation can import it. */
+function exportFile(conversations, instructions) {
+  return {
+    format: exportFormat,
+    version: 1,
+    exported_at: new Date().toISOString(),
+    instructions: instructions || "",
+    conversations: conversations.map(({ owner, ...c }) => c),
+  };
+}
 
 /** parseExport validates an exported file's text and keeps only known
  *  fields. The file is untrusted. */
@@ -244,6 +279,7 @@ function conversation(c) {
     created_at: time(c.created_at) || updated,
     updated_at: updated,
     messages: c.messages.map(message),
+    pinned: c.pinned === true,
   };
 }
 

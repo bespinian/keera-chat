@@ -489,9 +489,10 @@ function paintList() {
     );
     return;
   }
-  const groups = new Map();
+  // Pinned chats come first.
+  const groups = new Map(shown.some((c) => c.pinned) ? [["Pinned", []]] : []);
   for (const c of shown) {
-    const g = bucket(c.updated_at);
+    const g = c.pinned ? "Pinned" : bucket(c.updated_at);
     if (!groups.has(g)) groups.set(g, []);
     groups.get(g).push(c);
   }
@@ -533,7 +534,11 @@ function convItem(c, current) {
 
 function convMenu(anchor, c, item) {
   menu(anchor, [
+    c.pinned
+      ? { label: "Unpin", icon: icons.unpin, onClick: () => pin(c, false) }
+      : { label: "Pin", icon: icons.pin, onClick: () => pin(c, true) },
     { label: "Rename", icon: icons.pencil, onClick: () => renameInline(c, item) },
+    { label: "Export", icon: icons.download, onClick: () => exportChat(c) },
     {
       label: "Delete",
       icon: icons.trash,
@@ -557,6 +562,16 @@ function convMenu(anchor, c, item) {
       },
     },
   ]);
+}
+
+async function pin(c, pinned) {
+  try {
+    await app.chats.pin(c.id, pinned);
+  } catch (err) {
+    return toast(err.message, "bad");
+  }
+  c.pinned = pinned;
+  paintList();
 }
 
 /** drop stops the reply of a deleted conversation, so it does not save it
@@ -760,12 +775,33 @@ async function exportChats() {
     return toast(err.message, "bad");
   }
   if (!file.conversations.length) return toast("You have no chats to export yet.");
+  download(file, `keera-chats-${file.exported_at.slice(0, 10)}.json`);
+  toast(`Exported ${count(file.conversations.length, "chat")}. Anyone with the file can read them.`, "good");
+}
+
+/** exportChat saves one chat to a file, to share it or move it. A reply
+ *  still arriving is left out. */
+async function exportChat(c) {
+  let file;
+  try {
+    file = await app.chats.exportOne(c.id);
+  } catch (err) {
+    return toast(err.message, "bad");
+  }
+  const slug = (c.title || "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+  download(file, `keera-chat-${slug || "chat"}.json`);
+  toast("Exported this chat. Anyone with the file can read it.", "good");
+}
+
+function download(file, name) {
   const url = URL.createObjectURL(new Blob([JSON.stringify(file)], { type: "application/json" }));
-  const link = h("a", { href: url, download: `keera-chats-${file.exported_at.slice(0, 10)}.json` });
-  link.click();
+  h("a", { href: url, download: name }).click();
   // The browser reads the file a little after the click.
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  toast(`Exported ${count(file.conversations.length, "chat")}. Anyone with the file can read them.`, "good");
 }
 
 function importChats() {
@@ -799,6 +835,8 @@ async function importFile(f) {
   let message = done.length ? sentence(done.join(" and ")) : "These chats are all here already.";
   if (result.instructions) message += " Your custom instructions came with them.";
   toast(message, "good");
+  // A single chat is opened, so it can be read at once.
+  if (result.ids.length === 1) go(null, "/c/" + result.ids[0]);
 }
 
 async function deleteAll() {
