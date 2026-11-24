@@ -327,8 +327,6 @@ export function chatView(app, id) {
     stopBtn.hidden = !busy;
     sendBtn.disabled = !app.choice || (!input.value.trim() && !attached.length);
     attachBtn.disabled = !app.choice;
-    // Agents take text only.
-    attachBtn.hidden = !!app.choice?.agent;
     input.disabled = !app.choice;
   }
 
@@ -628,16 +626,12 @@ export function chatView(app, id) {
 
   // attached holds images as { name, url }, PDFs as { name, pdf, text,
   // pages } and text files as { name, text }. A PDF has pages only if the
-  // model read images when it was attached. A sent message keeps PDF pages
+  // model, or the agent's, read images when it was attached. A sent message keeps PDF pages
   // among its images, plus { name, at, pages } in pdfs, where at is the
   // first page's index. A PDF sent as text is one of its files.
   async function attach(files) {
     if (!app.choice) return;
-    if (app.choice.agent) {
-      toast(`${app.choice.agent.name} takes text only, so it cannot read files.`, "bad");
-      return;
-    }
-    const model = app.choice.model;
+    const model = reader(app.choice);
     for (const file of files) {
       const room = maxImages - attached.flatMap(imagesOf).length;
       if (imageTypes.includes(file.type)) {
@@ -668,7 +662,10 @@ export function chatView(app, id) {
         try {
           const { text, pages, read, total } = await readPDF(file, model.vision ? room : 0);
           if (!model.vision && !text.trim()) {
-            toast(`${file.name} has no text, perhaps because it is scanned. Choose a model that reads images.`, "bad");
+            toast(
+              `${file.name} has no text, perhaps because it is scanned. It needs a model that reads images.`,
+              "bad",
+            );
             continue;
           }
           attached.push({ name: file.name, pdf: true, text, pages: model.vision ? pages : null });
@@ -711,12 +708,8 @@ export function chatView(app, id) {
   function submit() {
     const text = input.value.trim();
     if ((!text && !attached.length) || live() || !app.choice) return;
-    if (app.choice.agent && attached.length) {
-      toast(`${app.choice.agent.name} takes text only. Remove the files to send.`, "bad");
-      return;
-    }
-    // The model may have changed since the files were attached.
-    const model = app.choice.model;
+    // The model or agent may have changed since the files were attached.
+    const model = reader(app.choice);
     if (!model.vision && attached.some((a) => a.url)) {
       toast(`${model.name} reads text only. Remove the images to send.`, "bad");
       return;
@@ -780,7 +773,8 @@ export function chatView(app, id) {
       if (edit !== null) target.messages = target.messages.slice(0, edit);
       target.messages.push(ask);
     }
-    const turns = target.messages.map((m) => turn(m, !!choice.model?.vision));
+    const vision = !!reader(choice).vision;
+    const turns = target.messages.map((m) => turn(m, vision));
     const reply = choice.agent
       ? { role: "assistant", agent: choice.agent.id, content: "", steps: [], streaming: true }
       : {
@@ -822,9 +816,9 @@ export function chatView(app, id) {
           }
           if (choice.agent) {
             // The agent keeps the history, so it gets only the new message,
-            // in a chat whose id it knows before the chat is saved.
-            const text = regenerate ? target.messages[lastUser].content : content;
-            const task = await api.tellAgent(choice.agent.id, target.id, text);
+            // the last turn, in a chat whose id it knows before the chat is
+            // saved.
+            const task = await api.tellAgent(choice.agent.id, target.id, turns.at(-1));
             started = true;
             finished = true;
             reply.task = task.id;
@@ -1157,6 +1151,12 @@ function pause(ms, signal) {
     if (signal.aborted) stop();
     else signal.addEventListener("abort", stop, { once: true });
   });
+}
+
+/** reader is what reads a message: the chosen model, or the agent's model,
+ *  which Keera Agents says reads images or not. */
+function reader(choice) {
+  return choice.agent ? { name: choice.agent.name, vision: !!choice.agent.vision } : choice.model;
 }
 
 /** turn is a message for the server. Failed replies are marked so the

@@ -47,6 +47,26 @@ type Agent struct {
 	Icon        string `json:"icon"`
 	Description string `json:"description"`
 	State       string `json:"state"`
+	// Vision says the agent's model reads images, so a PDF goes as its
+	// pages' images, as to a model that does.
+	Vision bool `json:"vision"`
+}
+
+// Message is what the person wrote to an agent and attached: images as data
+// URLs, and other files, or a PDF for an agent that reads no images, as
+// text.
+type Message struct {
+	// Conversation is chat's id for it; Keera Agents keeps one history per
+	// person and id.
+	Conversation string   `json:"conversation"`
+	Text         string   `json:"text"`
+	Images       []string `json:"images,omitempty"`
+	Files        []File   `json:"files,omitempty"`
+}
+
+type File struct {
+	Name string `json:"name"`
+	Text string `json:"text"`
 }
 
 // Task is one message to an agent.
@@ -78,12 +98,11 @@ func (c *Client) Agents(ctx context.Context, base, token string) ([]Agent, error
 	return out.Data, err
 }
 
-// Send gives an agent a message in a conversation. conversation is chat's
-// id for it; Keera Agents keeps one history per person and id.
-func (c *Client) Send(ctx context.Context, base, token, agentID, conversation, text string) (Task, error) {
+// Send gives an agent a message in a conversation.
+func (c *Client) Send(ctx context.Context, base, token, agentID string, m Message) (Task, error) {
 	var out Task
 	err := c.call(ctx, http.MethodPost, base, "/api/v1/chat/agents/"+url.PathEscape(agentID)+"/messages", token,
-		map[string]string{"conversation": conversation, "text": text}, &out)
+		m, &out)
 	return out, err
 }
 

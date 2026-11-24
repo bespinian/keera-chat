@@ -83,14 +83,19 @@ func taskOut(t agents.Task, events []agents.Event, after int64) agentTask {
 // tellAgent sends a message to an agent and returns its task at once. The
 // page then follows it with agentTask, so a reply survives a reload.
 func (s *Server) tellAgent(w http.ResponseWriter, r *http.Request, c *caller, base string) {
-	var in struct {
-		Conversation string `json:"conversation"`
-		Text         string `json:"text"`
-	}
+	var in agents.Message
 	if !s.readJSON(w, r, &in) {
 		return
 	}
-	t, err := s.agents.Send(r.Context(), base, c.token, r.PathValue("id"), in.Conversation, in.Text)
+	files := make([]textFile, len(in.Files))
+	for i, f := range in.Files {
+		files[i] = textFile(f)
+	}
+	if msg := checkAttachments(in.Images, files); msg != "" {
+		writeError(w, http.StatusBadRequest, "bad_request", msg)
+		return
+	}
+	t, err := s.agents.Send(r.Context(), base, c.token, r.PathValue("id"), in)
 	if err != nil {
 		s.gatewayFailed(w, r, err)
 		return

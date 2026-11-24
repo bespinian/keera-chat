@@ -100,21 +100,30 @@ func check(in replyIn) string {
 		if m.Role != "user" && m.Role != "assistant" {
 			return "the conversation could not be read; reload the page"
 		}
-		if len(m.Images) > maxImages {
-			return fmt.Sprintf("attach at most %d images to one message", maxImages)
+		if msg := checkAttachments(m.Images, m.Files); msg != "" {
+			return msg
 		}
-		for _, img := range m.Images {
-			if !validImage(img) {
-				return "images must be PNG, JPEG, GIF or WebP"
-			}
+	}
+	return ""
+}
+
+// checkAttachments says what is wrong with one message's attachments, or ""
+// when nothing is.
+func checkAttachments(images []string, files []textFile) string {
+	if len(images) > maxImages {
+		return fmt.Sprintf("attach at most %d images to one message", maxImages)
+	}
+	for _, img := range images {
+		if !validImage(img) {
+			return "images must be PNG, JPEG, GIF or WebP"
 		}
-		if len(m.Files) > maxFiles {
-			return fmt.Sprintf("attach at most %d files to one message", maxFiles)
-		}
-		for _, f := range m.Files {
-			if len(f.Text) > maxFileBytes {
-				return fmt.Sprintf("%s is larger than %d KB", f.Name, maxFileBytes>>10)
-			}
+	}
+	if len(files) > maxFiles {
+		return fmt.Sprintf("attach at most %d files to one message", maxFiles)
+	}
+	for _, f := range files {
+		if len(f.Text) > maxFileBytes {
+			return fmt.Sprintf("%s is larger than %d KB", f.Name, maxFileBytes>>10)
 		}
 	}
 	return ""

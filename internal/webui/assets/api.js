@@ -65,10 +65,15 @@ export const api = {
   me: () => request("GET", "/api/me"),
   switchOrg: (orgID) => request("POST", "/api/org", { org_id: orgID }),
 
-  /** tellAgent gives an agent a message in a conversation. It answers with
-   *  the task to follow with agentTask. */
-  tellAgent: (agentID, conversation, text) =>
-    request("POST", `/api/agents/${encodeURIComponent(agentID)}/messages`, { conversation, text }),
+  /** tellAgent gives an agent a message, a turn, in a conversation. It
+   *  answers with the task to follow with agentTask. */
+  tellAgent: (agentID, conversation, { content, images, files }) =>
+    request("POST", `/api/agents/${encodeURIComponent(agentID)}/messages`, {
+      conversation,
+      text: content,
+      images,
+      files,
+    }),
   /** agentTask reads a task and the steps after the cursor after. */
   agentTask: (taskID, after, signal) =>
     request("GET", `/api/agents/tasks/${encodeURIComponent(taskID)}?after=${after}`, undefined, { signal }),

@@ -15,7 +15,7 @@ import (
 type fakeAgents struct {
 	mu        sync.Mutex
 	tokens    []string
-	sent      map[string]string
+	sent      map[string]any
 	cancelled bool
 }
 
@@ -31,8 +31,9 @@ func (f *fakeAgents) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	reply := func(v any) { _ = json.NewEncoder(w).Encode(v) }
 	switch {
 	case r.Method == "GET" && r.URL.Path == "/api/v1/chat/agents":
-		reply(map[string]any{"data": []map[string]string{{"id": "agt_scout", "name": "Scout", "state": "running"}}})
+		reply(map[string]any{"data": []map[string]any{{"id": "agt_scout", "name": "Scout", "state": "running", "vision": true}}})
 	case r.Method == "POST" && r.URL.Path == "/api/v1/chat/agents/agt_scout/messages":
+		f.sent = nil
 		_ = json.NewDecoder(r.Body).Decode(&f.sent)
 		w.WriteHeader(http.StatusCreated)
 		reply(map[string]string{"id": "task_1", "state": "queued"})
@@ -86,11 +87,14 @@ func TestAgents(t *testing.T) {
 	h.signIn()
 
 	var me struct {
-		Agents    []struct{ ID, Name string }
+		Agents []struct {
+			ID, Name string
+			Vision   bool
+		}
 		AgentsURL string `json:"agents_url"`
 	}
 	if got := h.do("GET", "/api/me", &me); got != 200 || len(me.Agents) != 1 || me.Agents[0].Name != "Scout" ||
-		me.AgentsURL != srv.URL {
+		!me.Agents[0].Vision || me.AgentsURL != srv.URL {
 		t.Fatalf("GET /api/me = %d, agents %+v at %q", got, me.Agents, me.AgentsURL)
 	}
 
@@ -104,8 +108,34 @@ func TestAgents(t *testing.T) {
 	sent, token := fake.sent, fake.tokens[len(fake.tokens)-1]
 	fake.mu.Unlock()
 	// Keera Agents gets the person's own sign-in, and only the new message.
-	if sent["conversation"] != "c0123" || sent["text"] != "Run the tests" || !strings.HasPrefix(token, "Bearer keera_cli_") {
+	if sent["conversation"] != "c0123" || sent["text"] != "Run the tests" || sent["images"] != nil ||
+		!strings.HasPrefix(token, "Bearer keera_cli_") {
 		t.Fatalf("Keera Agents got %v with %q", sent, token)
+	}
+
+	// Attachments go on as the page sends them; ones a model would refuse
+	// stop here.
+	img := "data:image/png;base64,iVBORw0KGgo="
+	if got := h.post("/api/agents/agt_scout/messages", map[string]any{
+		"conversation": "c0123", "images": []string{img},
+		"files": []map[string]string{{"name": "report.pdf", "text": "[Page 1]\nRevenue grew."}},
+	}, &task); got != 200 {
+		t.Fatalf("send with attachments = %d", got)
+	}
+	fake.mu.Lock()
+	sent = fake.sent
+	fake.mu.Unlock()
+	if raw, _ := json.Marshal(sent); !strings.Contains(string(raw), `"images":["`+img+`"]`) ||
+		!strings.Contains(string(raw), `"files":[{"name":"report.pdf","text":"[Page 1]\nRevenue grew."}]`) {
+		t.Fatalf("Keera Agents got %s", raw)
+	}
+	var bad struct {
+		Error struct{ Code, Message string }
+	}
+	if got := h.post("/api/agents/agt_scout/messages", map[string]any{
+		"conversation": "c0123", "images": []string{"data:image/svg+xml;base64,PHN2Zz4="},
+	}, &bad); got != 400 || !strings.Contains(bad.Error.Message, "PNG, JPEG") {
+		t.Fatalf("an SVG = %d %+v", got, bad)
 	}
 
 	if got := h.do("GET", "/api/agents/tasks/task_1?after=0", &task); got != 200 || task.Done ||

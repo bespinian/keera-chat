@@ -52,7 +52,10 @@ any other request, and the person needs nothing but a browser.
   its own tools and workspace, so a reply can take minutes. Chat waits as for
   a model, then shows the answer with the tools the agent used, and picks the
   reply up again if the page closed.
-  Agents take text only. A link to `/?agent=<id>`, such as the **Chat**
+  Images, PDFs and files attach as for a model: a PDF goes as its pages'
+  images if the agent's model reads images, and as its text if not. The agent
+  keeps them with the chat, so later messages can still refer to them.
+  A link to `/?agent=<id>`, such as the **Chat**
   button on an agent's page in Keera Agents, starts a chat with that agent.
 - **Shows the budget before it runs out.** The account menu shows how much of
   the tightest budget above the person's key is spent. A refusal, such as a
