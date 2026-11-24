@@ -187,6 +187,7 @@ func TestMe(t *testing.T) {
 			Alias   string
 			Name    string
 			Context int
+			Vision  bool
 		}
 		PendingKeys int `json:"pending_keys"`
 	}
@@ -201,13 +202,13 @@ func TestMe(t *testing.T) {
 	if len(me.Keys) != 1 || me.Keys[0].ID != gatewaytest.KeyID {
 		t.Fatalf("keys = %+v, want only the active standard key", me.Keys)
 	}
-	if got := strings.Join(me.Keys[0].Models, ","); got != "keera-speed,keera-think,keera-auto" {
+	if got := strings.Join(me.Keys[0].Models, ","); got != "keera-speed,keera-think,keera-auto,keera-look" {
 		t.Errorf("key models = %s", got)
 	}
 	if me.Keys[0].Budget == nil || me.Keys[0].Budget.Scope != "project" {
 		t.Errorf("budget = %+v, want the project's, which has the least left", me.Keys[0].Budget)
 	}
-	if len(me.Models) != 3 || me.PendingKeys != 1 {
+	if len(me.Models) != 4 || me.PendingKeys != 1 {
 		t.Fatalf("models = %+v, pending = %d", me.Models, me.PendingKeys)
 	}
 	// A router has a name but no context size.
@@ -219,6 +220,16 @@ func TestMe(t *testing.T) {
 		if m.Name == "" {
 			t.Errorf("%s has no name", m.Alias)
 		}
+	}
+	// A router reads images only if every model it may send to does.
+	var vision []string
+	for _, m := range me.Models {
+		if m.Vision {
+			vision = append(vision, m.Alias)
+		}
+	}
+	if got := strings.Join(vision, ","); got != "keera-think,keera-look" {
+		t.Errorf("vision = %s, want keera-think,keera-look", got)
 	}
 }
 

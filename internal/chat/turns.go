@@ -12,7 +12,8 @@ type turn struct {
 	Role    string   `json:"role"` // "user" or "assistant"
 	Content string   `json:"content"`
 	Images  []string `json:"images,omitempty"`
-	// Files are attached text files. PDFs arrive as page images instead.
+	// Files are attached text files. A PDF arrives as page images, or as
+	// its text for a model that does not read images.
 	Files []textFile `json:"files,omitempty"`
 	// Failed marks a reply that did not come. It is not sent again.
 	Failed bool `json:"failed,omitempty"`

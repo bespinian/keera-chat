@@ -33,6 +33,9 @@ type modelOut struct {
 	Router bool `json:"router,omitempty"`
 	// Context is the model's context size in tokens. Routers have none.
 	Context int `json:"context,omitempty"`
+	// Vision says it reads images. A router does if every model it may send
+	// to does. Without it, PDFs are sent as text and images not at all.
+	Vision bool `json:"vision,omitempty"`
 }
 
 // keyOut is a key chat can send with. It never holds the secret.
@@ -112,11 +115,13 @@ func (s *Server) chatTargets(r *http.Request, c *caller) ([]modelOut, error) {
 		return nil, err
 	}
 	out := []modelOut{}
+	vision := map[string]bool{}
 	for _, m := range models {
+		vision[m.Alias] = m.Can(gateway.Vision)
 		if m.Enabled && m.Kind == "chat" && !m.Subscription {
 			out = append(out, modelOut{
 				Alias: m.Alias, Name: m.DisplayName,
-				Description: m.Description, Context: m.MaxContext,
+				Description: m.Description, Context: m.MaxContext, Vision: vision[m.Alias],
 			})
 		}
 	}
@@ -129,9 +134,11 @@ func (s *Server) chatTargets(r *http.Request, c *caller) ([]modelOut, error) {
 		s.log.Warn("reading the routers failed", "error", err)
 	}
 	for _, rt := range routers {
+		reaches := rt.Reaches()
 		out = append(out, modelOut{
 			Alias: rt.Alias, Name: rt.DisplayName,
 			Description: rt.Description, Router: true,
+			Vision: len(reaches) > 0 && !slices.ContainsFunc(reaches, func(a string) bool { return !vision[a] }),
 		})
 	}
 	return out, nil

@@ -154,3 +154,19 @@ func TestChatSendsKeyAndClient(t *testing.T) {
 		t.Errorf("headers = %v", got.Header)
 	}
 }
+
+func TestModelCan(t *testing.T) {
+	for _, tc := range []struct {
+		caps []string
+		want bool
+	}{
+		{nil, true}, // an older gateway, which does not say
+		{[]string{}, false},
+		{[]string{"tools"}, false},
+		{[]string{"tools", "vision"}, true},
+	} {
+		if got := (Model{Capabilities: tc.caps}).Can(Vision); got != tc.want {
+			t.Errorf("Can(vision) with %v = %v, want %v", tc.caps, got, tc.want)
+		}
+	}
+}

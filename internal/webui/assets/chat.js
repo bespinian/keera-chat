@@ -370,7 +370,7 @@ export function chatView(app, id) {
         h(
           "div",
           {
-            class: a.text != null ? "thumb thumb-file" : "thumb",
+            class: a.url || a.pages ? "thumb" : "thumb thumb-file",
             title: a.pages ? null : a.name,
           },
           a.pages ? pdfThumb(a.name, a.pages) : a.url ? imageButton(a.url, a.name) : fileChip(a.name),
@@ -628,18 +628,25 @@ export function chatView(app, id) {
 
   /* ------------------------------------------------------- attachments */
 
-  // attached holds images as { name, url }, PDFs as { name, pages } and text
-  // files as { name, text }. A sent message keeps PDF pages among its images,
-  // plus { name, at, pages } in pdfs, where at is the first page's index.
+  // attached holds images as { name, url }, PDFs as { name, pdf, text,
+  // pages } and text files as { name, text }. A PDF has pages only if the
+  // model read images when it was attached. A sent message keeps PDF pages
+  // among its images, plus { name, at, pages } in pdfs, where at is the
+  // first page's index. A PDF sent as text is one of its files.
   async function attach(files) {
     if (!app.choice) return;
     if (app.choice.agent) {
       toast(`${app.choice.agent.name} takes text only, so it cannot read files.`, "bad");
       return;
     }
+    const model = app.choice.model;
     for (const file of files) {
       const room = maxImages - attached.flatMap(imagesOf).length;
       if (imageTypes.includes(file.type)) {
+        if (!model.vision) {
+          toast(`${model.name} reads text only, so it cannot see ${file.name}.`, "bad");
+          continue;
+        }
         if (!room) {
           toast(`A message can carry at most ${maxImages} images.`, "bad");
           continue;
@@ -650,15 +657,26 @@ export function chatView(app, id) {
           toast(`${file.name} could not be read as an image.`, "bad");
         }
       } else if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
-        if (!room) {
+        // A model that reads images gets the pages, which keep tables,
+        // figures and scans. Any other gets the text.
+        if (model.vision && !room) {
           toast(`A message can carry at most ${maxImages} images, and each page of a PDF is one.`, "bad");
           continue;
         }
+        if (attached.filter((a) => a.text != null).length >= maxFiles) {
+          toast(`A message can carry at most ${maxFiles} files.`, "bad");
+          continue;
+        }
         try {
-          const { pages, total } = await readPDF(file, room);
-          attached.push({ name: file.name, pages });
-          if (total > pages.length) {
-            const first = pages.length === 1 ? "first page" : `first ${pages.length} pages`;
+          const { text, pages, read, total } = await readPDF(file, model.vision ? room : 0);
+          if (!model.vision && !text.trim()) {
+            toast(`${file.name} has no text, perhaps because it is scanned. Choose a model that reads images.`, "bad");
+            continue;
+          }
+          attached.push({ name: file.name, pdf: true, text, pages: model.vision ? pages : null });
+          const fit = model.vision ? pages.length : read;
+          if (total > fit) {
+            const first = fit === 1 ? "first page" : `first ${fit} pages`;
             toast(`Only the ${first} of ${file.name} fit in this message.`, "bad");
           }
         } catch (err) {
@@ -699,13 +717,30 @@ export function chatView(app, id) {
       toast(`${app.choice.agent.name} takes text only. Remove the files to send.`, "bad");
       return;
     }
+    // The model may have changed since the files were attached.
+    const model = app.choice.model;
+    if (!model.vision && attached.some((a) => a.url)) {
+      toast(`${model.name} reads text only. Remove the images to send.`, "bad");
+      return;
+    }
+    const blank = attached.find((a) => a.pdf && !(model.vision && a.pages) && !a.text.trim());
+    if (blank) {
+      toast(`${blank.name} has no text, perhaps because it is scanned. Attach it again to send its pages.`, "bad");
+      return;
+    }
     const images = [];
     const pdfs = [];
+    const files = [];
     for (const a of attached) {
-      if (a.pages) pdfs.push({ name: a.name, at: images.length, pages: a.pages.length });
-      images.push(...imagesOf(a));
+      if (a.pdf && model.vision && a.pages) {
+        pdfs.push({ name: a.name, at: images.length, pages: a.pages.length });
+        images.push(...a.pages);
+      } else if (a.url) {
+        images.push(a.url);
+      } else {
+        files.push({ name: a.name, text: a.text });
+      }
     }
-    const files = attached.filter((a) => a.text != null).map(({ name, text }) => ({ name, text }));
     // A chat started with only a document is named after it.
     const about = attached.find((a) => !a.url)?.name;
     input.value = "";
@@ -747,7 +782,7 @@ export function chatView(app, id) {
       if (edit !== null) target.messages = target.messages.slice(0, edit);
       target.messages.push(ask);
     }
-    const turns = target.messages.map(turn);
+    const turns = target.messages.map((m) => turn(m, !!choice.model?.vision));
     const reply = choice.agent
       ? { role: "assistant", agent: choice.agent.id, content: "", steps: [], streaming: true }
       : {
@@ -1121,10 +1156,15 @@ function pause(ms, signal) {
 }
 
 /** turn is a message for the server. Failed replies are marked so the
- *  server leaves them out. */
-function turn(m) {
+ *  server leaves them out. A model that does not read images refuses them,
+ *  so it is told they were left out instead. */
+function turn(m, vision) {
   const t = { role: m.role, content: m.content || "" };
-  if (m.images?.length) t.images = m.images;
+  if (m.images?.length && vision) t.images = m.images;
+  else if (m.images?.length) {
+    const note = `[${count(m.images.length, "image")} left out here: this model reads text only]`;
+    t.content = t.content ? `${note}\n\n${t.content}` : note;
+  }
   if (m.files?.length) t.files = m.files;
   if (m.error) t.failed = true;
   return t;
@@ -1249,15 +1289,17 @@ async function readImage(file) {
   return canvas.toDataURL(file.type, 0.9);
 }
 
-/** readPDF renders a PDF's first pages as images, as many as fit. Models
- *  here read images but not PDFs, and images keep tables, figures and scans.
- *  pdf.js is large, so it loads only when needed. */
+/** readPDF reads a PDF's text, and renders its first pages as images, as
+ *  many as room. Models here read images or text, not PDFs. read counts the
+ *  pages whose text fits in maxFileBytes. pdf.js is large, so it loads only
+ *  when needed. */
 async function readPDF(file, room) {
   const pdfjs = await import("./vendor/pdfjs/pdf.min.mjs");
   pdfjs.GlobalWorkerOptions.workerSrc = "/assets/vendor/pdfjs/pdf.worker.min.mjs";
   const task = pdfjs.getDocument({ data: await file.arrayBuffer() });
   try {
     const doc = await task.promise;
+    const { text, read } = await pdfText(doc);
     const pages = [];
     for (let n = 1; n <= Math.min(doc.numPages, room); n++) {
       const page = await doc.getPage(n);
@@ -1270,20 +1312,44 @@ async function readPDF(file, room) {
       pages.push(canvas.toDataURL("image/jpeg", 0.85));
       page.cleanup();
     }
-    return { pages, total: doc.numPages };
+    return { text, pages, read, total: doc.numPages };
   } finally {
     task.destroy();
   }
 }
 
-/** attachments regroups a message's images: PDFs as { name, pages }, other
- *  images as { name, url }. */
+/** pdfText joins a PDF's pages' text, each under its page number, while it
+ *  fits in maxFileBytes. A scan has none. */
+async function pdfText(doc) {
+  const encoder = new TextEncoder();
+  let text = "";
+  let any = false;
+  let read = 0;
+  for (let n = 1; n <= doc.numPages; n++) {
+    const page = await doc.getPage(n);
+    const content = await page.getTextContent();
+    page.cleanup();
+    const body = content.items
+      .map((item) => (item.str || "") + (item.hasEOL ? "\n" : ""))
+      .join("")
+      .trim();
+    const next = `${text}${text ? "\n\n" : ""}[Page ${n}]\n${body}`;
+    if (encoder.encode(next).length > maxFileBytes) break;
+    text = next;
+    any ||= !!body;
+    read = n;
+  }
+  return { text: any ? text : "", read };
+}
+
+/** attachments regroups a message's images: PDFs as { name, pdf, text,
+ *  pages }, other images as { name, url }. A PDF sent as pages has no text. */
 function attachments(images = [], pdfs = []) {
   const out = [];
   for (let n = 0; n < images.length;) {
     const pdf = pdfs.find((p) => p.at === n && p.pages > 0);
     const pages = pdf ? images.slice(n, n + pdf.pages) : null;
-    out.push(pdf ? { name: pdf.name, pages } : { name: `image ${n + 1}`, url: images[n] });
+    out.push(pdf ? { name: pdf.name, pdf: true, text: "", pages } : { name: `image ${n + 1}`, url: images[n] });
     n += pages ? pages.length : 1;
   }
   return out;

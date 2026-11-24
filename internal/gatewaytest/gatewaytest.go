@@ -120,10 +120,12 @@ func (g *Gateway) Handler() http.Handler {
 			{
 				"alias": "keera-speed", "kind": "chat", "enabled": true, "display_name": "Keera Speed",
 				"description": "Quick answers for everyday questions", "max_context_tokens": 131072,
+				"capabilities": []string{"tools"},
 			},
 			{
 				"alias": "keera-think", "kind": "chat", "enabled": true, "display_name": "Keera Think",
 				"description": "Thinks first, for harder questions", "max_context_tokens": 262144,
+				"capabilities": []string{"tools", "vision"},
 			},
 			{"alias": "keera-embed", "kind": "embedding", "enabled": true},
 			{"alias": "claude-plan", "kind": "chat", "enabled": true, "subscription": true},
@@ -134,6 +136,17 @@ func (g *Gateway) Handler() http.Handler {
 			{
 				"alias": "keera-auto", "display_name": "Keera Auto",
 				"description": "Picks Speed or Think for each message",
+				"start": map[string]any{
+					"kind": "route", "destinations": []string{"keera-speed", "keera-think"},
+				},
+			},
+			{
+				"alias": "keera-look", "display_name": "Keera Look",
+				"description": "Think, within a monthly budget",
+				"start": map[string]any{
+					"kind": "budget", "budget_micros": 1000000,
+					"next": map[string]any{"kind": "model", "ref": "keera-think"},
+				},
 			},
 		}})
 	}))
@@ -214,7 +227,7 @@ func (g *Gateway) access(w http.ResponseWriter, r *http.Request) {
 		{
 			"id": KeyID, "org_id": OrgID, "name": "Laptop", "prefix": "kg_ab12", "kind": "standard",
 			"state": "active", "project_name": "Research",
-			"allowed_models": []string{"keera-speed", "keera-think", "keera-auto", "keera-embed"},
+			"allowed_models": []string{"keera-speed", "keera-think", "keera-auto", "keera-look", "keera-embed"},
 			"scopes": []map[string]any{
 				{
 					"type": "org", "name": "Example AG", "budget_micros": 1_000_000_000,

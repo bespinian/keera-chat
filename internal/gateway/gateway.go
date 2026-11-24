@@ -15,6 +15,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 )
@@ -224,12 +225,70 @@ type Model struct {
 	Subscription bool   `json:"subscription"`
 	// MaxContext is the context size in tokens, or 0 if unknown.
 	MaxContext int `json:"max_context_tokens"`
+	// Capabilities say what the model can do beyond text, such as "vision".
+	// A gateway before v0.15.0 sends none, and nil means unknown: a gateway
+	// that knows them always sends a list.
+	Capabilities []string `json:"capabilities"`
+}
+
+// Vision is the capability of a model that reads images.
+const Vision = "vision"
+
+// Can reports whether the model states capability c. With capabilities
+// unknown, it assumes the model can, as chat did before they were known.
+func (m Model) Can(c string) bool {
+	return m.Capabilities == nil || slices.Contains(m.Capabilities, c)
 }
 
 type Router struct {
 	Alias       string `json:"alias"`
 	DisplayName string `json:"display_name"`
 	Description string `json:"description"`
+	Start       *Step  `json:"start"`
+}
+
+// Step is one node of a router, with only what tells where it sends.
+type Step struct {
+	Kind         string           `json:"kind"`
+	Ref          string           `json:"ref"`
+	Destinations []string         `json:"destinations"`
+	Next         *Step            `json:"next"`
+	Exceeded     *Step            `json:"exceeded"`
+	Branches     map[string]*Step `json:"branches"`
+}
+
+// Reaches lists every model the router may send to, as the gateway's
+// Router.Reaches does.
+func (r Router) Reaches() []string {
+	var out []string
+	add := func(alias string) {
+		if alias != "" && !slices.Contains(out, alias) {
+			out = append(out, alias)
+		}
+	}
+	var walk func(*Step)
+	walk = func(s *Step) {
+		if s == nil {
+			return
+		}
+		switch s.Kind {
+		case "model":
+			add(s.Ref)
+		case "route":
+			for _, d := range s.Destinations {
+				if s.Branches[d] == nil {
+					add(d)
+				}
+			}
+		}
+		walk(s.Next)
+		walk(s.Exceeded)
+		for _, b := range s.Branches {
+			walk(b)
+		}
+	}
+	walk(r.Start)
+	return out
 }
 
 func (c *Client) AuthConfig(ctx context.Context) (AuthConfig, error) {
