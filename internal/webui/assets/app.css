@@ -553,7 +553,7 @@ code {
     border-color 0.12s,
     opacity 0.12s;
 }
-.btn:hover:not(:disabled, .btn-primary, .btn-danger-solid) {
+.btn:hover:not(:disabled, .btn-primary, .btn-danger) {
   background: var(--surface-3);
   text-decoration: none;
 }
@@ -570,15 +570,17 @@ code {
   border-color: var(--accent);
   color: var(--accent-fg);
 }
-.btn-danger-solid {
-  background: var(--bad);
-  border-color: var(--bad);
-  color: #fff;
-}
 .btn-primary:hover:not(:disabled),
-.btn-danger-solid:hover:not(:disabled),
 .composer-send:hover:not(:disabled) {
   filter: brightness(1.08);
+}
+.btn-danger {
+  color: var(--bad);
+  border-color: var(--border-strong);
+}
+.btn-danger:hover:not(:disabled) {
+  background: var(--bad-soft);
+  border-color: var(--bad);
 }
 .btn-sm {
   padding: 5px 10px;
@@ -1566,16 +1568,27 @@ h3.md-h {
 
 /* ----------------------------------------------------------------- modal */
 
+/* A <dialog> that fills the screen and is its own veil. */
 .overlay {
-  position: fixed;
   inset: 0;
-  z-index: 100;
-  display: grid;
-  place-items: center;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  border: 0;
   padding: 20px;
+  color: inherit;
   background: var(--veil);
   backdrop-filter: blur(4px);
   animation: fade 0.12s ease-out;
+}
+.overlay[open] {
+  display: grid;
+  place-items: center;
+}
+.overlay::backdrop {
+  background: none;
 }
 @keyframes fade {
   from {

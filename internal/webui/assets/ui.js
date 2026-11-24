@@ -181,25 +181,21 @@ export async function copyText(text, what = "Copied") {
 
 /* ----------------------------------------------------------------- modal */
 
-/** showOverlay shows node and returns a close function, also bound to
- *  Escape. Closing restores focus and passes its value to onClose. */
-function showOverlay(node, onClose = () => {}) {
-  const previous = document.activeElement;
-  const onKey = (e) => {
-    if (e.key === "Escape") {
-      e.stopPropagation();
-      close(null);
-    }
-  };
-  const close = (value) => {
-    node.remove();
-    document.removeEventListener("keydown", onKey, true);
-    previous?.focus?.();
+/** showDialog opens dialog as a modal and returns a close function. The
+ *  browser closes it on Escape, keeps focus inside and restores it after.
+ *  Closing passes its value, or null, to onClose. */
+function showDialog(dialog, onClose = () => {}) {
+  let value = null;
+  dialog.addEventListener("close", () => {
+    dialog.remove();
     onClose(value);
+  });
+  document.body.append(dialog);
+  dialog.showModal();
+  return (v) => {
+    value = v;
+    dialog.close();
   };
-  document.body.append(node);
-  document.addEventListener("keydown", onKey, true);
-  return close;
 }
 
 /** modal resolves with what onSubmit returns, or null if dismissed.
@@ -209,16 +205,13 @@ export function modal({ title, body, submit = "Save", danger = false, onSubmit }
     const error = h("div", { class: "banner banner-bad", hidden: true });
     const okBtn = h(
       "button",
-      { class: "btn " + (danger ? "btn-danger-solid" : "btn-primary"), type: "submit" },
+      { class: "btn " + (danger ? "btn-danger" : "btn-primary"), type: "submit" },
       submit,
     );
     const form = h(
       "form",
       {
         class: "modal",
-        role: "dialog",
-        "aria-modal": "true",
-        "aria-label": title,
         onSubmit: async (e) => {
           e.preventDefault();
           okBtn.disabled = true;
@@ -241,16 +234,17 @@ export function modal({ title, body, submit = "Save", danger = false, onSubmit }
       ),
     );
     const overlay = h(
-      "div",
+      "dialog",
       {
         class: "overlay",
+        "aria-label": title,
         onMousedown: (e) => {
           if (e.target === overlay) close(null);
         },
       },
       form,
     );
-    const close = showOverlay(overlay, resolve);
+    const close = showDialog(overlay, resolve);
     const first = form.querySelector("textarea, input, select") || okBtn;
     first.focus();
   });
@@ -281,11 +275,9 @@ function viewImage(srcs, index, alt = "") {
   const many = srcs.length > 1;
   const closeBtn = iconButton(icons.close, "Close", () => close(), { class: "viewer-close" });
   const overlay = h(
-    "div",
+    "dialog",
     {
       class: "overlay viewer",
-      role: "dialog",
-      "aria-modal": "true",
       "aria-label": alt || "Image",
       onClick: () => close(),
       onKeydown: (e) => {
@@ -298,7 +290,7 @@ function viewImage(srcs, index, alt = "") {
     closeBtn,
   );
   show(index);
-  const close = showOverlay(overlay);
+  const close = showDialog(overlay);
   closeBtn.focus();
 }
 
