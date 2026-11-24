@@ -543,7 +543,7 @@ function convMenu(anchor, c, item) {
       label: "Delete",
       icon: icons.trash,
       danger: true,
-      onClick: async () => {
+      onClick: guarded(async () => {
         const ok = await confirmDialog(
           "Delete this chat?",
           `“${c.title}” will be deleted for good. This cannot be undone.`,
@@ -551,28 +551,31 @@ function convMenu(anchor, c, item) {
         );
         if (!ok) return;
         drop(app.live.get(c.id));
-        try {
-          await app.chats.remove(c.id);
-        } catch (err) {
-          return toast(err.message, "bad");
-        }
+        await app.chats.remove(c.id);
         app.conversations = app.conversations.filter((x) => x.id !== c.id);
         if (app.view?.id === c.id) go(null, "/");
         else paintList();
-      },
+      }),
     },
   ]);
 }
 
-async function pin(c, pinned) {
-  try {
-    await app.chats.pin(c.id, pinned);
-  } catch (err) {
-    return toast(err.message, "bad");
-  }
+/** guarded wraps fn so that an error shows as a toast instead of being lost. */
+function guarded(fn) {
+  return async (...args) => {
+    try {
+      return await fn(...args);
+    } catch (err) {
+      toast(err.message, "bad");
+    }
+  };
+}
+
+const pin = guarded(async (c, pinned) => {
+  await app.chats.pin(c.id, pinned);
   c.pinned = pinned;
   paintList();
-}
+});
 
 /** drop stops the reply of a deleted conversation, so it does not save it
  *  again. */
@@ -725,16 +728,12 @@ function budgetEl(b) {
   );
 }
 
-async function switchOrg(o) {
+const switchOrg = guarded(async (o) => {
   if (o.id === app.me.user.org_id) return;
-  try {
-    await api.switchOrg(o.id);
-  } catch (err) {
-    return toast(err.message, "bad");
-  }
+  await api.switchOrg(o.id);
   // Keys, models and chats belong to the organisation, so start over.
   location.href = "/";
-}
+});
 
 async function instructions() {
   const field = h("textarea", {
@@ -767,27 +766,17 @@ async function instructions() {
 
 /** exportChats saves this organisation's chats to a file, to move them to
  *  another browser. */
-async function exportChats() {
-  let file;
-  try {
-    file = await app.chats.exportAll();
-  } catch (err) {
-    return toast(err.message, "bad");
-  }
+const exportChats = guarded(async () => {
+  const file = await app.chats.exportAll();
   if (!file.conversations.length) return toast("You have no chats to export yet.");
   download(file, `keera-chats-${file.exported_at.slice(0, 10)}.json`);
   toast(`Exported ${count(file.conversations.length, "chat")}. Anyone with the file can read them.`, "good");
-}
+});
 
 /** exportChat saves one chat to a file, to share it or move it. A reply
  *  still arriving is left out. */
-async function exportChat(c) {
-  let file;
-  try {
-    file = await app.chats.exportOne(c.id);
-  } catch (err) {
-    return toast(err.message, "bad");
-  }
+const exportChat = guarded(async (c) => {
+  const file = await app.chats.exportOne(c.id);
   const slug = (c.title || "")
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, "-")
@@ -795,7 +784,7 @@ async function exportChat(c) {
     .slice(0, 60);
   download(file, `keera-chat-${slug || "chat"}.json`);
   toast("Exported this chat. Anyone with the file can read it.", "good");
-}
+});
 
 function download(file, name) {
   const url = URL.createObjectURL(new Blob([JSON.stringify(file)], { type: "application/json" }));
@@ -813,15 +802,10 @@ function importChats() {
   picker.click();
 }
 
-async function importFile(f) {
-  let result;
-  try {
-    // Skip chats with a live reply. The reply saves them when it ends.
-    result = await app.chats.importAll(await f.text(), new Set(app.live.keys()));
-    await loadChats();
-  } catch (err) {
-    return toast(err.message, "bad");
-  }
+const importFile = guarded(async (f) => {
+  // Skip chats with a live reply. The reply saves them when it ends.
+  const result = await app.chats.importAll(await f.text(), new Set(app.live.keys()));
+  await loadChats();
   paintList();
   // The chat on screen may have been replaced by a newer copy.
   if (app.view && result.updated.includes(app.view.id)) {
@@ -837,9 +821,9 @@ async function importFile(f) {
   toast(message, "good");
   // A single chat is opened, so it can be read at once.
   if (result.ids.length === 1) go(null, "/c/" + result.ids[0]);
-}
+});
 
-async function deleteAll() {
+const deleteAll = guarded(async () => {
   const ok = await confirmDialog(
     "Delete all chats?",
     `Every chat you have in ${app.me.user.org_name || "this organisation"} in this browser will be deleted for good. This cannot be undone.`,
@@ -848,23 +832,15 @@ async function deleteAll() {
   if (!ok) return;
   for (const l of app.live.values()) drop(l);
   drop(app.view?.pending);
-  try {
-    await app.chats.removeAll();
-  } catch (err) {
-    return toast(err.message, "bad");
-  }
+  await app.chats.removeAll();
   app.conversations = [];
   go(null, "/");
-}
+});
 
-async function signOut() {
-  try {
-    await api.logout();
-  } catch (err) {
-    // Only the server clears the cookie, so the person is still signed in.
-    return toast(err.message, "bad");
-  }
+// On failure the person is still signed in: only the server clears the cookie.
+const signOut = guarded(async () => {
+  await api.logout();
   location.href = "/";
-}
+});
 
 boot();

@@ -65,6 +65,18 @@ const newestFirst = (a, b) => (a.updated_at < b.updated_at ? 1 : -1);
 
 /** chats is one owner's conversations and settings. */
 export function chats(owner) {
+  /** change applies fn to one of this owner's conversations and keeps it. */
+  const change = (id, fn) =>
+    run(["conversations", "summaries"], "readwrite", (t) => {
+      const req = t.objectStore("conversations").get(id);
+      req.onsuccess = () => {
+        const c = req.result;
+        if (!c || c.owner !== owner) return;
+        fn(c);
+        keep(t, c);
+      };
+    });
+
   return {
     /** list returns summaries, newest first. */
     async list() {
@@ -104,28 +116,12 @@ export function chats(owner) {
 
     /** rename keeps updated_at, so the chat keeps its place in the list. */
     rename(id, title) {
-      return run(["conversations", "summaries"], "readwrite", (t) => {
-        const req = t.objectStore("conversations").get(id);
-        req.onsuccess = () => {
-          const c = req.result;
-          if (!c || c.owner !== owner) return;
-          c.title = title;
-          keep(t, c);
-        };
-      });
+      return change(id, (c) => (c.title = title));
     },
 
     /** pin keeps updated_at too. Pinned chats show first. */
     pin(id, pinned) {
-      return run(["conversations", "summaries"], "readwrite", (t) => {
-        const req = t.objectStore("conversations").get(id);
-        req.onsuccess = () => {
-          const c = req.result;
-          if (!c || c.owner !== owner) return;
-          c.pinned = pinned;
-          keep(t, c);
-        };
-      });
+      return change(id, (c) => (c.pinned = pinned));
     },
 
     remove(id) {

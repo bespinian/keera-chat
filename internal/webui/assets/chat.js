@@ -76,7 +76,7 @@ export function chatView(app, id) {
       "aria-label": "Scroll to the end",
       hidden: true,
       onClick: () => {
-        pinned = true;
+        atEnd = true;
         scroll.scrollTo({ top: scroll.scrollHeight, behavior: "smooth" });
       },
     },
@@ -211,16 +211,16 @@ export function chatView(app, id) {
 
   /* --------------------------------------------------------- scrolling */
 
-  // pinned means the reader is at the bottom. Someone who scrolled up is not
+  // atEnd means the reader is at the bottom. Someone who scrolled up is not
   // pulled back down by new tokens.
-  let pinned = true;
+  let atEnd = true;
   scroll.addEventListener("scroll", () => {
-    pinned = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 48;
-    toBottom.hidden = pinned;
+    atEnd = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 48;
+    toBottom.hidden = atEnd;
   });
   function stick() {
-    if (pinned) scroll.scrollTop = scroll.scrollHeight;
-    toBottom.hidden = pinned || !conv || !conv.messages.length;
+    if (atEnd) scroll.scrollTop = scroll.scrollHeight;
+    toBottom.hidden = atEnd || !conv || !conv.messages.length;
   }
   // The thread also resizes without a redraw, such as when a phone keyboard
   // opens or an image loads. This keeps the end in view. The dock floats
@@ -797,7 +797,7 @@ export function chatView(app, id) {
     const state = liveState(target, reply);
     if (target.id) app.live.set(target.id, state);
     else view.pending = state;
-    pinned = true;
+    atEnd = true;
     render();
     const paintOwner = painter(target, state);
 
@@ -956,9 +956,14 @@ export function chatView(app, id) {
         try {
           await follow(state, paintOwner, agentName(app, reply.agent));
         } catch (err) {
-          if (err?.name !== "AbortError") throw err;
-          reply.stopped = true;
-          stopTask(reply);
+          // Nothing awaits this, so a rethrown error would be lost.
+          if (err?.name === "AbortError") {
+            reply.stopped = true;
+            stopTask(reply);
+          } else {
+            reply.error = cutOff;
+            reply.error_detail = err?.message;
+          }
         } finally {
           await settle(target, state);
           const v = app.view;
@@ -1053,7 +1058,7 @@ export function chatView(app, id) {
     }
     if (conv.agent) app.chooseAgent(conv.agent);
     else app.choose(conv.model, conv.key_id);
-    pinned = true;
+    atEnd = true;
     render();
     const last = conv.messages.at(-1);
     if (!l && last && waiting(last)) resume(conv, last);
