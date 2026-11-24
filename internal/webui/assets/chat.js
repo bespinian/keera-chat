@@ -48,8 +48,6 @@ export function chatView(app, id) {
     // started is true once the chat has messages.
     started: () => !!conv?.messages.length,
     destroy,
-    // pending is a reply to a new chat with no id yet.
-    pending: null,
   };
   // gone means the view was left.
   let gone = false;
@@ -236,7 +234,7 @@ export function chatView(app, id) {
   /* -------------------------------------------------------- rendering */
 
   function live() {
-    return conv?.id ? app.live.get(conv.id) : view.pending;
+    return conv?.id && app.live.get(conv.id);
   }
 
   function render() {
@@ -794,9 +792,12 @@ export function chatView(app, id) {
           showReasoning: false,
         };
     target.messages.push(reply);
+    // A new chat gets its id now, so its reply lives in app.live like any
+    // other. It is saved, and its URL set, only once the server accepts it.
+    const fresh = !target.id;
+    if (fresh) target.id = newID();
     const state = liveState(target, reply);
-    if (target.id) app.live.set(target.id, state);
-    else view.pending = state;
+    app.live.set(target.id, state);
     atEnd = true;
     render();
     const paintOwner = painter(target, state);
@@ -812,7 +813,7 @@ export function chatView(app, id) {
         async () => {
           // Another tab may have changed this chat. Sending from a stale copy
           // would lose that.
-          if (target.id) {
+          if (!fresh) {
             const stored = await app.chats.find(target.id);
             if (!stored || stored.updated_at !== target.updated_at) {
               changed = true;
@@ -823,12 +824,11 @@ export function chatView(app, id) {
             // The agent keeps the history, so it gets only the new message,
             // in a chat whose id it knows before the chat is saved.
             const text = regenerate ? target.messages[lastUser].content : content;
-            const id = target.id || newID();
-            const task = await api.tellAgent(choice.agent.id, id, text);
+            const task = await api.tellAgent(choice.agent.id, target.id, text);
             started = true;
             finished = true;
             reply.task = task.id;
-            await begin(target, state, { content, images, about, choice, id });
+            await begin(target, state, { fresh, content, images, about, choice });
             await follow(state, paintOwner, choice.agent.name);
             return;
           }
@@ -843,7 +843,7 @@ export function chatView(app, id) {
             state.abort.signal,
           );
           started = true;
-          await begin(target, state, { content, images, about, choice });
+          await begin(target, state, { fresh, content, images, about, choice });
 
           let raw = "";
           let thought = "";
@@ -897,8 +897,9 @@ export function chatView(app, id) {
         reply.error = err?.message || "The reply ended unexpectedly.";
       }
     } finally {
-      if (view.pending === state) view.pending = null;
       await settle(target, state, started);
+      // A new chat that was never accepted was never saved either.
+      if (fresh && !started) target.id = null;
       const v = app.view;
       if (changed && v === view) load();
       else if (v && (v === view || v.id === target.id)) v.render();
@@ -907,15 +908,13 @@ export function chatView(app, id) {
   }
 
   /** begin saves the conversation once the server accepts the message, so
-   *  it is not lost if the reply fails. A new chat gets its id here. */
-  async function begin(target, state, { content, images, about, choice, id }) {
+   *  it is not lost if the reply fails. A new chat gets its title and URL
+   *  here. */
+  async function begin(target, state, { fresh, content, images, about, choice }) {
     const now = new Date().toISOString();
-    if (!target.id) {
-      target.id = id || newID();
+    if (fresh) {
       target.title = titleFrom(content, images.length, about);
       target.created_at = now;
-      app.live.set(target.id, state);
-      if (view.pending === state) view.pending = null;
       if (app.view === view) {
         view.id = target.id;
         history.replaceState(null, "", "/c/" + target.id);
@@ -983,7 +982,7 @@ export function chatView(app, id) {
   function painter(target, state) {
     return () => {
       const v = app.view;
-      if (v && (v.id === target.id || v.pending === state)) v.paint();
+      if (v && v.id === target.id) v.paint();
     };
   }
 
@@ -995,7 +994,7 @@ export function chatView(app, id) {
     const keep = save && !state.deleted;
     if (keep) await saveReply(target, state.reply);
     // Only after saving, so the next message cannot start from before it.
-    if (target.id) app.live.delete(target.id);
+    app.live.delete(target.id);
     if (keep) app.saw(summary(target));
   }
 

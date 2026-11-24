@@ -831,7 +831,6 @@ const deleteAll = guarded(async () => {
   );
   if (!ok) return;
   for (const l of app.live.values()) drop(l);
-  drop(app.view?.pending);
   await app.chats.removeAll();
   app.conversations = [];
   go(null, "/");
