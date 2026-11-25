@@ -734,11 +734,12 @@ export function chatView(app, id) {
     }
     // A chat started with only a document is named after it.
     const about = attached.find((a) => !a.url)?.name;
+    const sent = attached;
     input.value = "";
     autosize(input);
     attached = [];
     paintTray();
-    send({ content: text, images, pdfs, files, about });
+    send({ content: text, images, pdfs, files, about, sent });
   }
 
   async function send({
@@ -747,6 +748,8 @@ export function chatView(app, id) {
     pdfs = [],
     files = [],
     about = "",
+    // sent is what was in the tray, put back if the message is refused.
+    sent = [],
     edit = null,
     regenerate = false,
   }) {
@@ -878,7 +881,7 @@ export function chatView(app, id) {
         }
         if (ask && edit === null && app.view === view && !input.value) {
           input.value = content;
-          attached = [...attachments(images, pdfs), ...files];
+          attached = sent;
           paintTray();
           queueMicrotask(() => autosize(input));
         }
