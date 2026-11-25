@@ -342,7 +342,7 @@ function time(v) {
 
 /** summary is what the sidebar shows of a conversation. */
 export function summary(c) {
-  return { id: c.id, title: c.title, model: c.model, updated_at: c.updated_at };
+  return { id: c.id, title: c.title, updated_at: c.updated_at };
 }
 
 /** newID is random, so ids reveal nothing about who or when. */

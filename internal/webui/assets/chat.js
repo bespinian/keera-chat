@@ -248,7 +248,7 @@ export function chatView(app, id, agent = null) {
     // Without a model to send to, the composer could only refuse. A started
     // chat says why in its place.
     const stuck = !app.choice && !empty;
-    dock.hidden = !app.choice && !stuck;
+    dock.hidden = !app.choice && empty;
     composer.hidden = !app.choice;
     note.hidden = !app.choice;
     stuckNote.hidden = !stuck;
@@ -327,9 +327,8 @@ export function chatView(app, id, agent = null) {
     const busy = !!live();
     sendBtn.hidden = busy;
     stopBtn.hidden = !busy;
-    sendBtn.disabled = !app.choice || (!input.value.trim() && !attached.length);
-    attachBtn.disabled = !app.choice;
-    input.disabled = !app.choice;
+    // Without a choice the composer is hidden.
+    sendBtn.disabled = !input.value.trim() && !attached.length;
   }
 
   /** paintMeter shows how much of the model's context is used. It hides for
@@ -782,14 +781,7 @@ export function chatView(app, id, agent = null) {
     const turns = target.messages.map((m) => turn(m, vision));
     const reply = choice.agent
       ? { role: "assistant", agent: choice.agent.id, content: "", steps: [], streaming: true }
-      : {
-          role: "assistant",
-          model: choice.model.alias,
-          content: "",
-          reasoning: "",
-          streaming: true,
-          showReasoning: false,
-        };
+      : { role: "assistant", model: choice.model.alias, content: "", reasoning: "", streaming: true };
     target.messages.push(reply);
     // A new chat gets its id now, so its reply lives in app.live like any
     // other. It is saved, and its URL set, only once the server accepts it.
@@ -818,30 +810,26 @@ export function chatView(app, id, agent = null) {
               throw new ApiError(409, "changed", "This chat changed in another tab, so it was reloaded. Send again.");
             }
           }
+          // The agent keeps the history, so it gets only the new message, the
+          // last turn, in a chat whose id it knows before the chat is saved.
+          let stream;
           if (choice.agent) {
-            // The agent keeps the history, so it gets only the new message,
-            // the last turn, in a chat whose id it knows before the chat is
-            // saved.
-            const task = await api.tellAgent(choice.agent.id, target.id, turns.at(-1));
-            started = true;
-            reply.task = task.id;
-            await begin(target, state, { fresh, content, images, about, choice });
-            await follow(state, paintOwner, choice.agent.name);
-            return;
+            reply.task = (await api.tellAgent(choice.agent.id, target.id, turns.at(-1))).id;
+          } else {
+            stream = await api.chat(
+              {
+                model: choice.model.alias,
+                model_name: choice.model.name,
+                key_id: choice.key.id,
+                instructions: app.settings.instructions,
+                messages: turns,
+              },
+              state.abort.signal,
+            );
           }
-          const stream = await api.chat(
-            {
-              model: choice.model.alias,
-              model_name: choice.model.name,
-              key_id: choice.key.id,
-              instructions: app.settings.instructions,
-              messages: turns,
-            },
-            state.abort.signal,
-          );
           started = true;
           await begin(target, state, { fresh, content, images, about, choice });
-          await readReply(stream, reply, paintOwner);
+          await (choice.agent ? follow(state, paintOwner, choice.agent.name) : readReply(stream, reply, paintOwner));
         },
         () => {
           throw new ApiError(409, "busy", "A reply is still being written in this chat, perhaps in another tab.");
@@ -1133,7 +1121,7 @@ async function readReply(stream, reply, paint) {
       reply.reasoning = thought + split.reasoning;
       paint();
     } else if (event === "done") {
-      Object.assign(reply, data, { streaming: false });
+      Object.assign(reply, data);
       done = true;
     }
   }
@@ -1147,18 +1135,13 @@ async function readReply(stream, reply, paint) {
 function endedBy(reply, err) {
   if (err?.name === "AbortError") {
     reply.stopped = true;
-    if (reply.task) stopTask(reply);
+    // The agent may have finished meanwhile, so a failure is ignored.
+    if (reply.task) api.cancelAgentTask(reply.task).catch(() => {});
   } else {
     // Browser errors like "network error" only help admins.
     reply.error = cutOff;
     reply.error_detail = err?.message;
   }
-}
-
-/** stopTask asks Keera Agents to stop an agent's task. The agent may have
- *  finished meanwhile, so a failure is ignored. */
-function stopTask(reply) {
-  api.cancelAgentTask(reply.task).catch(() => {});
 }
 
 /** pause waits ms, or rejects as soon as signal aborts. */
@@ -1395,14 +1378,14 @@ async function pdfText(doc) {
   return { text: any ? text : "", read };
 }
 
-/** attachments regroups a message's images: PDFs as { name, pdf, text,
- *  pages }, other images as { name, url }. A PDF sent as pages has no text. */
+/** attachments regroups a message's images: PDFs as { name, pages }, other
+ *  images as { name, url }. */
 function attachments(images = [], pdfs = []) {
   const out = [];
   for (let n = 0; n < images.length;) {
     const pdf = pdfs.find((p) => p.at === n && p.pages > 0);
     const pages = pdf ? images.slice(n, n + pdf.pages) : null;
-    out.push(pdf ? { name: pdf.name, pdf: true, text: "", pages } : { name: `image ${n + 1}`, url: images[n] });
+    out.push(pdf ? { name: pdf.name, pages } : { name: `image ${n + 1}`, url: images[n] });
     n += pages ? pages.length : 1;
   }
   return out;

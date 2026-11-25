@@ -394,12 +394,10 @@ function chooseAgent(id) {
  *  with models stays with models. When that is not offered, such as while
  *  Keera Agents is out of reach, nothing is chosen and the chat says why. */
 function chooseFor(conv) {
-  if (conv.agent) chooseAgent(conv.agent);
-  else choose(conv.model, conv.key_id);
-  if ((app.choice?.agent?.id || "") !== (conv.agent || "")) {
-    app.choice = null;
-    paintPicker();
-  }
+  if (!conv.agent && app.me.models.length) return choose(conv.model, conv.key_id);
+  const agent = conv.agent && app.me.agents.find((a) => a.id === conv.agent);
+  app.choice = agent ? { agent } : null;
+  paintPicker();
 }
 
 function keysFor(alias) {

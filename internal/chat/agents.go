@@ -48,8 +48,8 @@ func (s *Server) offeredAgents(r *http.Request, c *caller) []agents.Agent {
 	return list
 }
 
-// agentTask is a task as the page follows it.
-type agentTask struct {
+// taskView is a task as the page follows it.
+type taskView struct {
 	ID     string `json:"id"`
 	State  string `json:"state"`
 	Done   bool   `json:"done"`
@@ -62,8 +62,8 @@ type agentTask struct {
 	After int64 `json:"after"`
 }
 
-func taskOut(t agents.Task, events []agents.Event, after int64) agentTask {
-	out := agentTask{
+func taskOut(t agents.Task, events []agents.Event, after int64) taskView {
+	out := taskView{
 		ID: t.ID, State: t.State, Done: t.Done(), Result: t.Result, Error: t.Error,
 		Steps: []string{}, After: after,
 	}

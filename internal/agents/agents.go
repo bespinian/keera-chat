@@ -7,7 +7,6 @@
 package agents
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -33,11 +32,7 @@ type Client struct {
 }
 
 func New() *Client {
-	return &Client{http: &http.Client{
-		// A redirect means a proxy's sign-in page. Following it would drop
-		// the token and parse HTML as JSON.
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}}
+	return &Client{http: gateway.NewHTTPClient(nil)}
 }
 
 // Agent is one the person may give work to.
@@ -128,22 +123,10 @@ func (c *Client) call(ctx context.Context, method, base, path, token string, in,
 	ctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 
-	var body io.Reader
-	if in != nil {
-		b, err := json.Marshal(in)
-		if err != nil {
-			return err
-		}
-		body = bytes.NewReader(b)
-	}
-	req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(base, "/")+path, body)
+	req, err := gateway.NewJSONRequest(ctx, method, strings.TrimRight(base, "/")+path, in)
 	if err != nil {
 		return err
 	}
-	if in != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("User-Agent", gateway.ClientName)
 

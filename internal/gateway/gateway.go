@@ -44,12 +44,39 @@ type Client struct {
 func New(base string) *Client {
 	t := http.DefaultTransport.(*http.Transport).Clone()
 	t.MaxIdleConnsPerHost = 32
-	return &Client{base: strings.TrimRight(base, "/"), http: &http.Client{
-		Transport: t,
-		// A redirect means a proxy's sign-in page. Following it would drop
-		// the token and parse HTML as JSON.
+	return &Client{base: strings.TrimRight(base, "/"), http: NewHTTPClient(t)}
+}
+
+// NewHTTPClient returns a client that does not follow redirects. A redirect
+// means a proxy's sign-in page. Following it would drop the token and parse
+// HTML as JSON.
+func NewHTTPClient(t http.RoundTripper) *http.Client {
+	return &http.Client{
+		Transport:     t,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}}
+	}
+}
+
+// NewJSONRequest builds a request that accepts JSON and sends in as JSON,
+// unless in is nil.
+func NewJSONRequest(ctx context.Context, method, url string, in any) (*http.Request, error) {
+	var body io.Reader
+	if in != nil {
+		b, err := json.Marshal(in)
+		if err != nil {
+			return nil, err
+		}
+		body = bytes.NewReader(b)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		return nil, err
+	}
+	if in != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("Accept", "application/json")
+	return req, nil
 }
 
 // Error is a refusal, worded for people.
@@ -371,23 +398,10 @@ func (c *Client) call(ctx context.Context, method, path, token string, in, out a
 	ctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 
-	var body io.Reader
-	if in != nil {
-		b, err := json.Marshal(in)
-		if err != nil {
-			return err
-		}
-		body = bytes.NewReader(b)
-	}
-	req, err := http.NewRequestWithContext(ctx, method, c.base+ControlPrefix+path, body)
+	req, err := NewJSONRequest(ctx, method, c.base+ControlPrefix+path, in)
 	if err != nil {
 		return err
 	}
-	if in != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	req.Header.Set("Accept", "application/json")
-
 	res, err := c.send(req, token)
 	if err != nil {
 		return err

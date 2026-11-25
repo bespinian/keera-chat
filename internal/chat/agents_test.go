@@ -98,7 +98,7 @@ func TestAgents(t *testing.T) {
 		t.Fatalf("GET /api/me = %d, agents %+v at %q", got, me.Agents, me.AgentsURL)
 	}
 
-	var task agentTask
+	var task taskView
 	if got := h.post("/api/agents/agt_scout/messages",
 		map[string]string{"conversation": "c0123", "text": "Run the tests"}, &task); got != 200 || task.ID != "task_1" ||
 		task.Done {
