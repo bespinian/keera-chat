@@ -1232,6 +1232,10 @@ h3.md-h {
 .dock > .column > * {
   pointer-events: auto;
 }
+.dock-stuck {
+  display: grid;
+  justify-items: center;
+}
 
 .composer {
   display: flex;

@@ -47,6 +47,7 @@ const app = {
   live: new Map(),
   choose,
   chooseAgent,
+  chooseFor,
   saw,
   go,
 };
@@ -383,6 +384,19 @@ function chooseAgent(id) {
   if (!agent) return choose(null, null);
   app.choice = { agent };
   paintPicker();
+}
+
+/** chooseFor picks where a started chat's next message goes. An agent keeps
+ *  the chat's history itself, so a chat stays with its agent, and a chat
+ *  with models stays with models. When that is not offered, such as while
+ *  Keera Agents is out of reach, nothing is chosen and the chat says why. */
+function chooseFor(conv) {
+  if (conv.agent) chooseAgent(conv.agent);
+  else choose(conv.model, conv.key_id);
+  if ((app.choice?.agent?.id || "") !== (conv.agent || "")) {
+    app.choice = null;
+    paintPicker();
+  }
 }
 
 function keysFor(alias) {

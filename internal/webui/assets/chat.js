@@ -36,6 +36,8 @@ const cutOff = "The reply was cut off before it finished. Try again.";
 
 // How often an agent's task is read while it works.
 const followEvery = 1500;
+// The longest wait between reads while they fail.
+const followMax = 60_000;
 
 export function chatView(app, id) {
   const view = {
@@ -176,7 +178,8 @@ export function chatView(app, id) {
   );
   const note = h("div", { class: "composer-note" });
   const hero = h("div", { class: "hero" });
-  const dock = h("div", { class: "dock" }, h("div", { class: "column" }, composer, note));
+  const stuckNote = h("div", { class: "dock-stuck", hidden: true });
+  const dock = h("div", { class: "dock" }, h("div", { class: "column" }, stuckNote, composer, note));
 
   const el = h(
     "div",
@@ -241,8 +244,14 @@ export function chatView(app, id) {
     const empty = !conv || !conv.messages.length;
     el.classList.toggle("is-empty", empty && !!conv);
     el.classList.toggle("no-access", !app.choice);
-    // Without a model to send to, the composer could only refuse.
-    dock.hidden = !app.choice;
+    // Without a model to send to, the composer could only refuse. A started
+    // chat says why in its place.
+    const stuck = !app.choice && !empty;
+    dock.hidden = !app.choice && !stuck;
+    composer.hidden = !app.choice;
+    note.hidden = !app.choice;
+    stuckNote.hidden = !stuck;
+    if (stuck) replace(stuckNote, stuckNotice(app, conv));
     paintHero();
     paintNote();
     paintSend();
@@ -495,6 +504,7 @@ export function chatView(app, id) {
       { class: "msg" },
       body,
       m.error ? errorEl(m, canRetry) : null,
+      m.trouble ? h("div", { class: "msg-note" }, `Still waiting. ${m.trouble}`) : null,
       m.stopped ? h("div", { class: "msg-note" }, "Stopped.") : null,
       m.finish === "length" ? h("div", { class: "msg-note" }, "The reply reached its length limit.") : null,
       m.agent ? agentTail(m, i, last) : modelTail(m, i, last, canRetry),
@@ -977,6 +987,8 @@ export function chatView(app, id) {
    *  chat for the next message. */
   async function settle(target, state, save = true) {
     state.reply.streaming = false;
+    // Only for while the reply is followed.
+    delete state.reply.trouble;
     // Do not bring back a chat deleted while its reply arrived.
     const keep = save && !state.deleted;
     if (keep) await saveReply(target, state.reply);
@@ -1042,8 +1054,7 @@ export function chatView(app, id) {
       dock.hidden = true;
       return;
     }
-    if (conv.agent) app.chooseAgent(conv.agent);
-    else app.choose(conv.model, conv.key_id);
+    app.chooseFor(conv);
     atEnd = true;
     render();
     const last = conv.messages.at(-1);
@@ -1081,12 +1092,15 @@ function waiting(m) {
 }
 
 /** follow reads an agent's task until it is done, and fills in the reply.
- *  It keeps trying while Keera Chat or Keera Agents cannot be reached, since
- *  the agent works on meanwhile. Only stopping throws. */
+ *  It gives up only when Keera Agents no longer has the task. Any other
+ *  failure may pass, such as Keera Agents out of reach or refusing the
+ *  sign-in for a while, and the agent works on meanwhile. So it keeps trying
+ *  and shows why it is still waiting. Only stopping throws. */
 async function follow(state, paint, name) {
   const { reply } = state;
   const signal = state.abort.signal;
   let after = 0;
+  let failures = 0;
   for (;;) {
     let t;
     try {
@@ -1096,13 +1110,23 @@ async function follow(state, paint, name) {
       // The page shows sign-in. The reply stays waiting, so it is picked up
       // again after signing in, and the agent's work is not lost.
       if (err instanceof ApiError && err.code === "signed_out") return;
-      if (!(err instanceof ApiError) || !passing(err)) {
-        reply.error = err?.message || "The reply could not be read.";
+      // Keera Agents' own answer: the task is gone, or not this person's.
+      if (err instanceof ApiError && err.code === "not_found") {
+        reply.error = "This reply is no longer in Keera Agents.";
+        reply.error_detail = err.message;
         return;
       }
-      await pause(followEvery * 4, signal);
+      reply.trouble = err?.message || "The reply could not be read.";
+      paint();
+      failures++;
+      await pause(Math.min(followEvery * 2 ** (failures + 1), followMax), signal);
       continue;
     }
+    if (reply.trouble) {
+      delete reply.trouble;
+      paint();
+    }
+    failures = 0;
     after = t.after;
     if (t.steps.length) {
       reply.steps = [...(reply.steps || []), ...t.steps];
@@ -1120,11 +1144,6 @@ async function follow(state, paint, name) {
     }
     await pause(followEvery, signal);
   }
-}
-
-/** passing reports whether a failed read is worth trying again. */
-function passing(err) {
-  return err.status === 0 || err.status === 429 || err.status >= 500;
 }
 
 /** stopTask asks Keera Agents to stop an agent's task. The agent may have
@@ -1251,6 +1270,31 @@ function accessNotice(app) {
     ];
   }
   return h("div", { class: "notice" }, h("strong", {}, title), h("p", {}, body));
+}
+
+/** stuckNotice explains why a started chat cannot go on. */
+function stuckNotice(app, conv) {
+  if (conv.agent) {
+    return h(
+      "div",
+      { class: "notice" },
+      h("strong", {}, "This chat's agent is not available"),
+      h(
+        "p",
+        {},
+        "Keera Agents may be out of reach, or the agent is no longer shared with you. Reload the page to try again.",
+      ),
+    );
+  }
+  if (app.me.agents.length) {
+    return h(
+      "div",
+      { class: "notice" },
+      h("strong", {}, "No chat model is available"),
+      h("p", {}, "This chat is with a model, and none is open to you now. Start a new chat to work with an agent."),
+    );
+  }
+  return accessNotice(app);
 }
 
 /** splitThink is splitThink in turns.go, for a reply still streaming. */
