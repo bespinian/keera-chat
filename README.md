@@ -6,7 +6,7 @@ is for everyone else. It is a chat in the browser, like ChatGPT or Claude, that
 signs people in with their Keera account and sends every message through the
 gateway with their own key.
 
-![Keera Chat with a conversation open: the chats in the sidebar, a reply with a numbered list, and a message with an image](docs/assets/screenshot.png)
+![Keera Chat with a conversation open: the chats in the sidebar and a reply with a numbered list](https://docs.keera.ch/assets/images/chat.webp)
 
 So a chat message meets the same guardrails, budgets, filters and audit log as
 any other request, and the person needs nothing but a browser.
@@ -99,8 +99,8 @@ go install github.com/air-verse/air@latest
 ### In production
 
 Keera Chat runs on its own address, so the gateway has to be told it. On the
-gateway, set `KEERA_CHAT_URL` to Keera Chat's address (see the gateway's
-`docs/sso.md`, "Signing in to Keera Chat"). On Keera Chat:
+gateway, set `KEERA_CHAT_URL` to Keera Chat's address
+([Run Keera Chat](https://docs.keera.ch/operate/chat/)). On Keera Chat:
 
 ```sh
 KEERA_CHAT_PUBLIC_URL=https://chat.example.ch
