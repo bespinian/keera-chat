@@ -784,8 +784,8 @@ const exportChats = guarded(async () => {
   toast(`Exported ${count(file.conversations.length, "chat")}. Anyone with the file can read them.`, "good");
 });
 
-/** exportChat saves one chat to a file, to share it or move it. A reply
- *  still arriving is left out. */
+/** exportChat saves one chat to a file, to share it or move it. A model's
+ *  reply still arriving is left out. An agent's is kept, waiting on its task. */
 const exportChat = guarded(async (c) => {
   const file = await app.chats.exportOne(c.id);
   const slug = (c.title || "")

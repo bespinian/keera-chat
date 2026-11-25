@@ -466,7 +466,7 @@ export function chatView(app, id, agent = null) {
     });
     return h(
       "div",
-      { class: "msg msg-user msg-editing" },
+      { class: "msg" },
       h(
         "div",
         { class: "edit-box" },
@@ -629,9 +629,10 @@ export function chatView(app, id, agent = null) {
 
   // attached holds images as { name, url }, PDFs as { name, pdf, text,
   // pages } and text files as { name, text }. A PDF has pages only if the
-  // model, or the agent's, read images when it was attached. A sent message keeps PDF pages
-  // among its images, plus { name, at, pages } in pdfs, where at is the
-  // first page's index. A PDF sent as text is one of its files.
+  // chosen model or agent read images when it was attached. A sent message
+  // keeps PDF pages among its images, plus { name, at, pages } in pdfs,
+  // where at is the first page's index. A PDF sent as text is one of its
+  // files.
   async function attach(files) {
     if (!app.choice) return;
     const model = reader(app.choice);

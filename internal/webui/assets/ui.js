@@ -1,5 +1,6 @@
-// Small DOM helpers, shared with the gateway's panel. Children become text
-// nodes, so user or model text is never parsed as markup.
+// DOM helpers, icons, menus, dialogs and formatting. h() mirrors the
+// gateway panel's. Children become text nodes, so user or model text is
+// never parsed as markup.
 
 export function h(tag, props, ...children) {
   return build(document.createElement(tag), props, children);
