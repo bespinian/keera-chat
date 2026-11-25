@@ -802,7 +802,6 @@ export function chatView(app, id) {
     // Until the server accepts the message, nothing is saved and the
     // conversation can be rolled back.
     let started = false;
-    let finished = false;
     let changed = false;
     try {
       await exclusive(
@@ -823,7 +822,6 @@ export function chatView(app, id) {
             // saved.
             const task = await api.tellAgent(choice.agent.id, target.id, turns.at(-1));
             started = true;
-            finished = true;
             reply.task = task.id;
             await begin(target, state, { fresh, content, images, about, choice });
             await follow(state, paintOwner, choice.agent.name);
@@ -841,36 +839,16 @@ export function chatView(app, id) {
           );
           started = true;
           await begin(target, state, { fresh, content, images, about, choice });
-
-          let raw = "";
-          let thought = "";
-          for await (const { event, data } of stream) {
-            if (event === "delta") {
-              raw += data.content || "";
-              thought += data.reasoning || "";
-              const split = splitThink(raw);
-              reply.content = split.content;
-              reply.reasoning = thought + split.reasoning;
-              paintOwner();
-            } else if (event === "done") {
-              Object.assign(reply, data, { streaming: false });
-              finished = true;
-            }
-          }
-          // The server always ends with "done", even on refusal. Without it,
-          // the stream was cut, such as by a proxy.
-          if (!finished) reply.error = cutOff;
+          await readReply(stream, reply, paintOwner);
         },
         () => {
           throw new ApiError(409, "busy", "A reply is still being written in this chat, perhaps in another tab.");
         },
       );
     } catch (err) {
-      const aborted = err?.name === "AbortError";
-      if (started && aborted) {
-        reply.stopped = true;
-        if (reply.task) stopTask(reply);
-      } else if (!started && (err instanceof ApiError || aborted)) {
+      if (started) {
+        endedBy(reply, err);
+      } else if (err instanceof ApiError || err?.name === "AbortError") {
         // Refused or stopped before the server accepted it: roll back, and put
         // the message back in the composer or edit box. A chat changed in
         // another tab is reloaded, so its edit is dropped.
@@ -886,10 +864,6 @@ export function chatView(app, id) {
           queueMicrotask(() => autosize(input));
         }
         if (err instanceof ApiError && err.code !== "signed_out") toast(err.message, "bad");
-      } else if (started) {
-        // Browser errors like "network error" only help admins.
-        reply.error = cutOff;
-        reply.error_detail = err?.message;
       } else {
         reply.error = err?.message || "The reply ended unexpectedly.";
       }
@@ -956,13 +930,7 @@ export function chatView(app, id) {
           await follow(state, paintOwner, agentName(app, reply.agent));
         } catch (err) {
           // Nothing awaits this, so a rethrown error would be lost.
-          if (err?.name === "AbortError") {
-            reply.stopped = true;
-            stopTask(reply);
-          } else {
-            reply.error = cutOff;
-            reply.error_detail = err?.message;
-          }
+          endedBy(reply, err);
         } finally {
           await settle(target, state);
           const v = app.view;
@@ -1146,6 +1114,42 @@ async function follow(state, paint, name) {
       return;
     }
     await pause(followEvery, signal);
+  }
+}
+
+/** readReply fills in a model's reply as it streams. */
+async function readReply(stream, reply, paint) {
+  let raw = "";
+  let thought = "";
+  let done = false;
+  for await (const { event, data } of stream) {
+    if (event === "delta") {
+      raw += data.content || "";
+      thought += data.reasoning || "";
+      const split = splitThink(raw);
+      reply.content = split.content;
+      reply.reasoning = thought + split.reasoning;
+      paint();
+    } else if (event === "done") {
+      Object.assign(reply, data, { streaming: false });
+      done = true;
+    }
+  }
+  // The server always ends with "done", even on refusal. Without it, the
+  // stream was cut, such as by a proxy.
+  if (!done) reply.error = cutOff;
+}
+
+/** endedBy marks a reply the server accepted but that did not finish:
+ *  stopped by the person, or cut off. */
+function endedBy(reply, err) {
+  if (err?.name === "AbortError") {
+    reply.stopped = true;
+    if (reply.task) stopTask(reply);
+  } else {
+    // Browser errors like "network error" only help admins.
+    reply.error = cutOff;
+    reply.error_detail = err?.message;
   }
 }
 
