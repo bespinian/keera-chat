@@ -552,6 +552,64 @@ func TestCallbackChecksState(t *testing.T) {
 	}
 }
 
+// A silent sign-in signs in a browser signed in to the gateway's panel, and
+// is asked once per browser session, and not right after signing out.
+func TestSilentSignIn(t *testing.T) {
+	h := newHarness(t)
+	silent := func() bool {
+		t.Helper()
+		var cfg struct {
+			Silent      bool   `json:"silent"`
+			SignInError string `json:"sign_in_error"`
+		}
+		h.do("GET", "/auth/config", &cfg)
+		if cfg.SignInError != "" {
+			t.Fatalf("sign_in_error = %q, want none", cfg.SignInError)
+		}
+		return cfg.Silent
+	}
+	trySilent := func() {
+		t.Helper()
+		res, err := h.c.Get(h.chat.URL + "/auth/login?silent=1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = res.Body.Close()
+		if res.Request.URL.Path != "/" || res.Request.URL.RawQuery != "" {
+			t.Fatalf("the silent sign-in ended at %s, not the page", res.Request.URL)
+		}
+	}
+
+	h.gw.SignedOut = true
+	if !silent() {
+		t.Fatal("a new browser was not asked to sign in silently")
+	}
+	trySilent()
+	if got := h.do("GET", "/api/me", nil); got != 401 {
+		t.Fatalf("signed out at the gateway, GET /api/me = %d, want 401", got)
+	}
+	if silent() {
+		t.Fatal("asked to sign in silently again after the gateway said no")
+	}
+
+	h.signIn()
+	if got := h.do("POST", "/auth/logout", nil); got != 200 {
+		t.Fatalf("POST /auth/logout = %d", got)
+	}
+	if silent() {
+		t.Fatal("asked to sign in silently right after signing out")
+	}
+
+	// Another browser, signed in to the gateway's panel, needs no click.
+	h.gw.SignedOut = false
+	jar, _ := cookiejar.New(nil)
+	h.c.Jar = jar
+	trySilent()
+	if got := h.do("GET", "/api/me", nil); got != 200 {
+		t.Fatalf("after a silent sign-in, GET /api/me = %d, want 200", got)
+	}
+}
+
 // TestSignInErrorNotFromURL checks that a link cannot set the sign-in error.
 func TestSignInErrorNotFromURL(t *testing.T) {
 	h := newHarness(t)

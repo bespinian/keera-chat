@@ -27,6 +27,9 @@ const (
 type Gateway struct {
 	// Delay is the pause between streamed words.
 	Delay time.Duration
+	// SignedOut makes a silent sign-in come back with login_required, as for
+	// a browser not signed in to the gateway's panel.
+	SignedOut bool
 
 	mu         sync.Mutex
 	codes      map[string]string // one-time code → PKCE challenge
@@ -160,6 +163,11 @@ func (g *Gateway) login(w http.ResponseWriter, r *http.Request) {
 	back, err := url.Parse(q.Get("cli_redirect"))
 	if err != nil || back.Host == "" || q.Get("cli_challenge") == "" || q.Get("cli_state") == "" {
 		http.Error(w, "a sign-in needs cli_redirect, cli_challenge and cli_state", http.StatusBadRequest)
+		return
+	}
+	if q.Get("silent") == "1" && g.SignedOut {
+		back.RawQuery = url.Values{"error": {"login_required"}, "state": {q.Get("cli_state")}}.Encode()
+		http.Redirect(w, r, back.String(), http.StatusFound)
 		return
 	}
 	code := rand.Text()

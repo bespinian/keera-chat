@@ -137,6 +137,12 @@ async function signIn() {
   } catch (err) {
     error = err.message;
   }
+  // A browser signed in to the gateway's panel comes straight back signed
+  // in. Otherwise it comes back here, and the buttons show.
+  if (cfg?.silent) {
+    location.replace("/auth/login?silent=1");
+    return;
+  }
 
   const ways = [];
   for (const p of cfg?.providers || []) {

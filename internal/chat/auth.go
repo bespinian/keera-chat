@@ -26,6 +26,11 @@ const (
 	loginCookie   = "keera_chat_login"
 	// errorCookie holds why a sign-in failed, until the screen shows it.
 	errorCookie = "keera_chat_error"
+	// askedCookie says the gateway was already asked this browser session
+	// whether the browser is signed in there, or that the person signed out
+	// here. Without it, the sign-in screen asks first, and is skipped for a
+	// browser signed in to the gateway's panel.
+	askedCookie = "keera_chat_asked"
 
 	// loginTTL matches the gateway's. People leave consent screens open.
 	loginTTL = 15 * time.Minute
@@ -64,11 +69,14 @@ func (s *Server) authConfig(w http.ResponseWriter, r *http.Request) {
 	if s.readSealed(r, errorCookie, &signInError) {
 		s.clearCookie(w, errorCookie, "/auth")
 	}
+	_, err = r.Cookie(askedCookie)
+	notAsked := err != nil
 	writeJSON(w, http.StatusOK, map[string]any{
 		"providers":     providers,
 		"passkeys":      cfg.Passkeys,
 		"gateway_url":   s.opts.GatewayURL,
 		"sign_in_error": signInError,
+		"silent":        notAsked && signInError == "" && (len(providers) > 0 || cfg.Passkeys),
 	})
 }
 
@@ -86,8 +94,13 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		"cli_challenge": {challenge(p.Verifier)},
 		"cli_state":     {p.State},
 	}
-	// The gateway does not guess between providers.
-	if provider := r.URL.Query().Get("provider"); provider != "" {
+	// silent=1 only asks the gateway whether this browser is signed in there.
+	// It is asked once per browser session, so a no is not asked again.
+	// Otherwise the gateway does not guess between providers.
+	if r.URL.Query().Get("silent") == "1" {
+		http.SetCookie(w, s.cookie(askedCookie, "1", "/auth", 0))
+		q.Set("silent", "1")
+	} else if provider := r.URL.Query().Get("provider"); provider != "" {
 		q.Set("provider", provider)
 	}
 	http.Redirect(w, r, s.opts.GatewayURL+gateway.ControlPrefix+"/auth/login?"+q.Encode(), http.StatusFound)
@@ -106,6 +119,11 @@ func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
 	// The state stops a link from signing someone in as somebody else.
 	case subtle.ConstantTimeCompare([]byte(q.Get("state")), []byte(p.State)) != 1:
 		s.failSignIn(w, r, "this sign-in was not the one this browser started; try again")
+		return
+	// Asked silently and not signed in at the gateway: no error, the screen
+	// shows the ways to sign in.
+	case q.Get("error") == "login_required":
+		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	case q.Get("code") == "":
 		s.failSignIn(w, r, "the sign-in came back without a code; try again")
@@ -134,6 +152,8 @@ func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
 		s.failed(w, r, err)
 		return
 	}
+	// Once this sign-in ends, the gateway may be asked again.
+	s.clearCookie(w, askedCookie, "/auth")
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
@@ -146,6 +166,9 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.clearSession(w)
+	// The browser may still be signed in to the gateway's panel. Without
+	// this, the sign-in screen would sign the person straight back in.
+	http.SetCookie(w, s.cookie(askedCookie, "1", "/auth", 0))
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
