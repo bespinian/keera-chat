@@ -178,6 +178,36 @@ func TestNoAgentsConnected(t *testing.T) {
 	}
 }
 
+// Keera Agents rejecting the sign-in leaves the person signed in to chat,
+// with the models usable.
+func TestAgentsRejectSignIn(t *testing.T) {
+	h := newHarness(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"code": "unauthenticated", "message": "sign in"}})
+	}))
+	t.Cleanup(srv.Close)
+	h.gw.ConnectAgents(srv.URL)
+	h.signIn()
+	var me struct {
+		Agents []any
+		Models []any
+	}
+	if got := h.do("GET", "/api/me", &me); got != 200 || len(me.Agents) != 0 || len(me.Models) == 0 {
+		t.Fatalf("GET /api/me = %d, agents %v, models %v", got, me.Agents, me.Models)
+	}
+	var refused struct {
+		Error struct{ Code string }
+	}
+	if got := h.do("GET", "/api/agents/tasks/task_1?after=0", &refused); got != 401 ||
+		refused.Error.Code != "agents_rejected" {
+		t.Fatalf("a task = %d %+v", got, refused)
+	}
+	if got := h.do("GET", "/api/me", &me); got != 200 {
+		t.Fatalf("GET /api/me after the refusal = %d, want still signed in", got)
+	}
+}
+
 // An unreachable Keera Agents leaves the models usable.
 func TestAgentsUnreachable(t *testing.T) {
 	h := newHarness(t)

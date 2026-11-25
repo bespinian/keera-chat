@@ -164,9 +164,18 @@ func (c *Client) call(ctx context.Context, method, base, path, token string, in,
 	return nil
 }
 
+// Rejected is shown when Keera Agents refuses a sign-in the gateway accepts.
+const Rejected = "Keera Agents did not accept your sign-in. Reload the page, or ask your administrator."
+
 // readError reads Keera Agents' {"error": {"code", "message"}}, the
 // gateway's shape. Anything else, such as a proxy's page, keeps the status.
 func readError(res *http.Response) error {
+	// Chat checks the sign-in with the gateway. Passing on Keera Agents' 401
+	// as a rejected sign-in would sign the person out of chat, and back in,
+	// in a loop.
+	if res.StatusCode == http.StatusUnauthorized {
+		return &gateway.Error{Status: http.StatusUnauthorized, Code: "agents_rejected", Message: Rejected}
+	}
 	var env struct {
 		Error struct {
 			Code    string `json:"code"`

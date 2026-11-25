@@ -46,12 +46,24 @@ func TestRedirectNotFollowed(t *testing.T) {
 func TestErrors(t *testing.T) {
 	t.Run("in the gateway's shape", func(t *testing.T) {
 		base := serve(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"there is no such task"}}`))
+		})
+		_, err := New().Cancel(context.Background(), base, "t", "task_1")
+		if e := gatewayError(t, err); e.Status != http.StatusNotFound || e.Code != "not_found" ||
+			e.Message != "there is no such task" {
+			t.Errorf("err = %d %q %q", e.Status, e.Code, e.Message)
+		}
+	})
+	// Only the gateway decides that a sign-in is over.
+	t.Run("a rejected sign-in", func(t *testing.T) {
+		base := serve(t, func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusUnauthorized)
 			_, _ = w.Write([]byte(`{"error":{"code":"unauthenticated","message":"sign in again"}}`))
 		})
 		_, err := New().Cancel(context.Background(), base, "t", "task_1")
-		if !gateway.IsUnauthorized(err) {
-			t.Errorf("err = %v, want the sign-in rejected", err)
+		if e := gatewayError(t, err); gateway.IsUnauthorized(err) || e.Message != Rejected {
+			t.Errorf("err = %v, want Keera Agents' refusal, not a rejected sign-in", err)
 		}
 	})
 	t.Run("a proxy's page", func(t *testing.T) {

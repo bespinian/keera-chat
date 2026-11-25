@@ -905,6 +905,9 @@ export function chatView(app, id) {
    *  it is not lost if the reply fails. A new chat gets its title and URL
    *  here. */
   async function begin(target, state, { fresh, content, images, about, choice }) {
+    // Deleted while the server took the message. An agent's message cannot
+    // be stopped on its way, so its task is cancelled once following stops.
+    if (state.deleted) return;
     const now = new Date().toISOString();
     if (fresh) {
       target.title = titleFrom(content, images.length, about);
@@ -1100,6 +1103,9 @@ async function follow(state, paint, name) {
       t = await api.agentTask(reply.task, after, signal);
     } catch (err) {
       if (err?.name === "AbortError") throw err;
+      // The page shows sign-in. The reply stays waiting, so it is picked up
+      // again after signing in, and the agent's work is not lost.
+      if (err instanceof ApiError && err.code === "signed_out") return;
       if (!(err instanceof ApiError) || !passing(err)) {
         reply.error = err?.message || "The reply could not be read.";
         return;

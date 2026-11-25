@@ -6,7 +6,6 @@ import (
 	"strconv"
 
 	"github.com/bespinian/keera-chat/internal/agents"
-	"github.com/bespinian/keera-chat/internal/gateway"
 )
 
 // agentsBase is where chat reaches Keera Agents for the caller, or "" when
@@ -33,23 +32,20 @@ func (s *Server) withAgents(next func(http.ResponseWriter, *http.Request, *calle
 
 // offeredAgents lists the caller's agents for /api/me. A failure leaves them
 // out, so chat with models still works.
-func (s *Server) offeredAgents(r *http.Request, c *caller) ([]agents.Agent, error) {
+func (s *Server) offeredAgents(r *http.Request, c *caller) []agents.Agent {
 	base := s.agentsBase(c)
 	if base == "" {
-		return []agents.Agent{}, nil
+		return []agents.Agent{}
 	}
 	list, err := s.agents.Agents(r.Context(), base, c.token)
 	if err != nil {
-		if gateway.IsUnauthorized(err) {
-			return nil, err
-		}
 		s.log.Warn("reading the agents failed", "error", err)
-		return []agents.Agent{}, nil
+		return []agents.Agent{}
 	}
 	if list == nil {
 		list = []agents.Agent{}
 	}
-	return list, nil
+	return list
 }
 
 // agentTask is a task as the page follows it.
