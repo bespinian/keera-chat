@@ -83,11 +83,7 @@ func (s *Server) tellAgent(w http.ResponseWriter, r *http.Request, c *caller, ba
 	if !s.readJSON(w, r, &in) {
 		return
 	}
-	files := make([]textFile, len(in.Files))
-	for i, f := range in.Files {
-		files[i] = textFile(f)
-	}
-	if msg := checkAttachments(in.Images, files); msg != "" {
+	if msg := checkAttachments(in.Images, in.Files); msg != "" {
 		writeError(w, http.StatusBadRequest, "bad_request", msg)
 		return
 	}

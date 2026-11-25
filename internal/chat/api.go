@@ -69,7 +69,6 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request, c *caller) {
 		s.gatewayFailed(w, r, err)
 		return
 	}
-	agents := s.offeredAgents(r, c)
 	keys, pending, inactive := usableKeys(access.Keys, targets)
 	// Only the models some key can reach, in the gateway's order.
 	offered := []modelOut{}
@@ -97,7 +96,7 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request, c *caller) {
 		"models":        offered,
 		"pending_keys":  pending,
 		"inactive_keys": inactive,
-		"agents":        agents,
+		"agents":        s.offeredAgents(r, c),
 		// Where the panel shows an agent's work in full.
 		"agents_url": c.me.AgentsURL,
 	})

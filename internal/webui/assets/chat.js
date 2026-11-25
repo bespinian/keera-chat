@@ -302,22 +302,14 @@ export function chatView(app, id) {
 
   function paintNote() {
     if (!app.choice) return;
-    if (app.choice.agent) {
-      replace(
-        note,
-        "Agents can be wrong, so check what matters. ",
-        app.choice.agent.name,
-        " works in Keera Agents with its own tools, under the rules of ",
-        app.me.user.org_name ? `${app.me.user.org_name}'s ` : "your ",
-        "Keera Gateway.",
-      );
-      return;
-    }
+    const org = app.me.user.org_name;
+    const gateway = `${org ? `${org}'s` : "your"} Keera Gateway`;
+    const agent = app.choice.agent;
     replace(
       note,
-      "Replies can be wrong, so check what matters. Messages go through ",
-      app.me.user.org_name ? `${app.me.user.org_name}'s ` : "your ",
-      "Keera Gateway, and its rules apply.",
+      agent
+        ? `Agents can be wrong, so check what matters. ${agent.name} works in Keera Agents with its own tools, under the rules of ${gateway}.`
+        : `Replies can be wrong, so check what matters. Messages go through ${gateway}, and its rules apply.`,
     );
   }
 
@@ -634,7 +626,13 @@ export function chatView(app, id) {
     const model = reader(app.choice);
     for (const file of files) {
       const room = maxImages - attached.flatMap(imagesOf).length;
-      if (imageTypes.includes(file.type)) {
+      const image = imageTypes.includes(file.type);
+      // PDFs count as files too, since each keeps its text.
+      if (!image && attached.filter((a) => a.text != null).length >= maxFiles) {
+        toast(`A message can carry at most ${maxFiles} files.`, "bad");
+        continue;
+      }
+      if (image) {
         if (!model.vision) {
           toast(`${model.name} reads text only, so it cannot see ${file.name}.`, "bad");
           continue;
@@ -653,10 +651,6 @@ export function chatView(app, id) {
         // figures and scans. Any other gets the text.
         if (model.vision && !room) {
           toast(`A message can carry at most ${maxImages} images, and each page of a PDF is one.`, "bad");
-          continue;
-        }
-        if (attached.filter((a) => a.text != null).length >= maxFiles) {
-          toast(`A message can carry at most ${maxFiles} files.`, "bad");
           continue;
         }
         try {
@@ -683,10 +677,6 @@ export function chatView(app, id) {
           );
         }
       } else {
-        if (attached.filter((a) => a.text != null).length >= maxFiles) {
-          toast(`A message can carry at most ${maxFiles} files.`, "bad");
-          continue;
-        }
         if (file.size > maxFileBytes) {
           toast(`${file.name} is larger than ${maxFileBytes >> 10} KB.`, "bad");
           continue;
@@ -794,7 +784,7 @@ export function chatView(app, id) {
     app.live.set(target.id, state);
     atEnd = true;
     render();
-    const paintOwner = painter(target, state);
+    const paintOwner = painter(target);
 
     // Until the server accepts the message, nothing is saved and the
     // conversation can be rolled back.
@@ -940,7 +930,7 @@ export function chatView(app, id) {
    *  the page closed. Another tab may follow it already. */
   function resume(target, reply) {
     const state = liveState(target, reply);
-    const paintOwner = painter(target, state);
+    const paintOwner = painter(target);
     exclusive(
       target.id,
       async () => {
@@ -976,7 +966,7 @@ export function chatView(app, id) {
   }
 
   /** painter repaints whichever view shows the reply, if any. */
-  function painter(target, state) {
+  function painter(target) {
     return () => {
       const v = app.view;
       if (v && v.id === target.id) v.paint();

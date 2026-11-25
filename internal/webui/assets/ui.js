@@ -203,11 +203,7 @@ function showDialog(dialog, onClose = () => {}) {
 export function modal({ title, body, submit = "Save", danger = false, onSubmit }) {
   return new Promise((resolve) => {
     const error = h("div", { class: "banner banner-bad", hidden: true });
-    const okBtn = h(
-      "button",
-      { class: "btn " + (danger ? "btn-danger" : "btn-primary"), type: "submit" },
-      submit,
-    );
+    const okBtn = h("button", { class: "btn " + (danger ? "btn-danger" : "btn-primary"), type: "submit" }, submit);
     const form = h(
       "form",
       {

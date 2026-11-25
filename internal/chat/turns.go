@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/bespinian/keera-chat/internal/agents"
 )
 
 // turn is one message of a conversation, as the page sends it.
@@ -19,10 +21,8 @@ type turn struct {
 	Failed bool `json:"failed,omitempty"`
 }
 
-type textFile struct {
-	Name string `json:"name"`
-	Text string `json:"text"`
-}
+// textFile is an attached text file, as a message to an agent carries it too.
+type textFile = agents.File
 
 // Message is a reply, as the page stores it.
 type Message struct {

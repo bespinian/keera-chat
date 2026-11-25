@@ -293,7 +293,7 @@ func (r Router) Reaches() []string {
 
 func (c *Client) AuthConfig(ctx context.Context) (AuthConfig, error) {
 	var out AuthConfig
-	err := c.call(ctx, "GET", "/auth/config", "", nil, &out)
+	err := c.call(ctx, http.MethodGet, "/auth/config", "", nil, &out)
 	return out, err
 }
 
@@ -301,30 +301,30 @@ func (c *Client) AuthConfig(ctx context.Context) (AuthConfig, error) {
 // chat started that sign-in.
 func (c *Client) Redeem(ctx context.Context, code, verifier, label string) (Token, error) {
 	var out Token
-	err := c.call(ctx, "POST", "/auth/cli/token", "", map[string]string{
+	err := c.call(ctx, http.MethodPost, "/auth/cli/token", "", map[string]string{
 		"code": code, "verifier": verifier, "label": label,
 	}, &out)
 	return out, err
 }
 
 func (c *Client) Logout(ctx context.Context, token string) error {
-	return c.call(ctx, "POST", "/auth/logout", token, nil, nil)
+	return c.call(ctx, http.MethodPost, "/auth/logout", token, nil, nil)
 }
 
 func (c *Client) Me(ctx context.Context, token string) (Me, error) {
 	var out Me
-	err := c.call(ctx, "GET", "/v1/me", token, nil, &out)
+	err := c.call(ctx, http.MethodGet, "/v1/me", token, nil, &out)
 	return out, err
 }
 
 // SwitchOrg moves the sign-in to another organisation.
 func (c *Client) SwitchOrg(ctx context.Context, token, orgID string) error {
-	return c.call(ctx, "POST", "/v1/me/org", token, map[string]string{"org_id": orgID}, nil)
+	return c.call(ctx, http.MethodPost, "/v1/me/org", token, map[string]string{"org_id": orgID}, nil)
 }
 
 func (c *Client) Access(ctx context.Context, token string) (Access, error) {
 	var out Access
-	err := c.call(ctx, "GET", "/v1/access", token, nil, &out)
+	err := c.call(ctx, http.MethodGet, "/v1/access", token, nil, &out)
 	return out, err
 }
 
@@ -341,7 +341,7 @@ func list[T any](ctx context.Context, c *Client, path, token, orgID string) ([]T
 	var out struct {
 		Data []T `json:"data"`
 	}
-	err := c.call(ctx, "GET", path+"?"+url.Values{"org_id": {orgID}}.Encode(), token, nil, &out)
+	err := c.call(ctx, http.MethodGet, path+"?"+url.Values{"org_id": {orgID}}.Encode(), token, nil, &out)
 	return out.Data, err
 }
 
