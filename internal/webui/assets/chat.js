@@ -39,7 +39,8 @@ const followEvery = 1500;
 // The longest wait between reads while they fail.
 const followMax = 60_000;
 
-export function chatView(app, id) {
+/** chatView shows conversation id, or a new chat with agent, if given. */
+export function chatView(app, id, agent = null) {
   const view = {
     id,
     el: null,
@@ -1039,7 +1040,7 @@ export function chatView(app, id) {
   }
 
   // Before the first paint, which shows the composer only with a model.
-  if (!id) app.choose(null, null);
+  if (!id) agent ? app.chooseAgent(agent) : app.choose(null, null);
   render();
   if (id) load();
   return view;

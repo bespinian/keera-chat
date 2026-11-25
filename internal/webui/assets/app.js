@@ -316,12 +316,7 @@ function route() {
   // Already shown: a new chat that just got its id, or the same link.
   if (app.view && id && app.view.id === id) return;
   if (app.view) app.view.destroy();
-  app.view = chatView(app, id);
-  const agent = id ? null : takeAskedAgent();
-  if (agent) {
-    app.chooseAgent(agent);
-    app.view.render();
-  }
+  app.view = chatView(app, id, id ? null : takeAskedAgent());
   replace(els.main, app.view.el);
   paintList();
   // Not on phones, where focus opens the keyboard.
@@ -332,6 +327,8 @@ function route() {
 // chat with that agent. The sign-in drops the query, so the id waits in this
 // tab's session storage until a new chat takes it.
 const askedAgent = "keera.chat.agent";
+// askedAgentHere holds the id when session storage cannot.
+let askedAgentHere = null;
 
 function keepAskedAgent() {
   const id = new URLSearchParams(location.search).get("agent");
@@ -340,13 +337,13 @@ function keepAskedAgent() {
     sessionStorage.setItem(askedAgent, id);
   } catch {
     // Without storage, the link only works when already signed in.
-    app.askedAgent = id;
+    askedAgentHere = id;
   }
 }
 
 function takeAskedAgent() {
-  let id = app.askedAgent;
-  app.askedAgent = null;
+  let id = askedAgentHere;
+  askedAgentHere = null;
   try {
     id ||= sessionStorage.getItem(askedAgent);
     sessionStorage.removeItem(askedAgent);
